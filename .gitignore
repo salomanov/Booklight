@@ -1,0 +1,60 @@
+# Build artifacts
+build/
+*.o
+*.elf
+*.map
+.pio/
+.vscode/
+
+# Large media & temporary reverse engineering session files
+*.mp4
+*.avi
+*.dll
+*.bat
+*.txt
+*.log
+step*.txt
+steps_out.txt
+scratch*.txt
+
+# Reverse engineering session folders & scripts
+bit_gallery/
+bit_map_capture/
+bit_scan_true/
+bit_walk/
+bits_clean/
+clean_scan/
+diff_bits/
+gallery/
+headlight_colors/
+headlight_find_red/
+headlight_mapping/
+headlights_test/
+modes_test/
+protocol_test/
+scan_results/
+segment_scan/
+test_verify/
+timelapse/
+toggle_test/
+walking_zero/
+*_sniffer.py
+check_swd.py
+parse_sym.py
+read_datasheets.py
+swd_*.py
+test_swd*.py
+trap_*.py
+catch_and_erase.py
+STLinkReflash*.exe
+
+# Root temporary webcam and test images (curated photos are in photos/)
+/*.jpg
+/*.png
+!photos/live_display.jpg
+
+# OS / Python files
+__pycache__/
+*.py[cod]
+.DS_Store
+Thumbs.db

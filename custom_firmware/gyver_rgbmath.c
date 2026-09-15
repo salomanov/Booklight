@@ -1,0 +1,25 @@
+#include "gyver_rgbmath.h"
+
+/* 100-step Gamma 2.2 lookup table */
+static const uint8_t GAMMA_100[101] = {
+    0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,
+    2,   2,   2,   2,   3,   3,   3,   4,   4,   4,   5,   5,   6,   6,   7,
+    7,   8,   8,   9,   9,  10,  11,  11,  12,  13,  13,  14,  15,  16,  16,
+   17,  18,  19,  20,  21,  22,  23,  24,  25,  26,  27,  28,  29,  30,  31,
+   33,  34,  35,  36,  37,  39,  40,  41,  43,  44,  46,  47,  49,  50,  52,
+   53,  55,  56,  58,  60,  61,  63,  65,  66,  68,  70,  72,  74,  75,  77,
+   79,  81,  83,  85,  87,  89,  91,  94,  96,  98, 100
+};
+
+uint8_t gyver_gamma2(uint8_t val)
+{
+    if (val >= 100) return 100;
+    return GAMMA_100[val];
+}
+
+uint8_t gyver_gamma8(uint8_t val)
+{
+    /* AlexGyver CIE 1931 / Gamma 2.2 fast approximation */
+    uint32_t v = val;
+    return (uint8_t)((v * v * v + 32512UL) / 65025UL);
+}
