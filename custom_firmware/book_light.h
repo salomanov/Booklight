@@ -22,9 +22,9 @@
 /* Alternate Touch Pins available on board (PB5, PA3, PA1) */
 #define BOOK_LIGHT_TOUCH_IRQn           EXTI4_15_IRQn
 
-/* 1-Wire FH8016 Display Data Pin (replaces old 8-pin display) */
+/* 1-Wire FH8016 Display Data Pin (replaces old 8-pin display: Pad 8 / far right pad) */
 #define BOOK_LIGHT_DISP_PORT            GPIOA
-#define BOOK_LIGHT_DISP_PIN             GPIO_PIN_4
+#define BOOK_LIGHT_DISP_PIN             GPIO_PIN_7
 
 /* USB-C 5V VBUS Detection Pin */
 #define BOOK_LIGHT_VBUS_PORT            GPIOB
