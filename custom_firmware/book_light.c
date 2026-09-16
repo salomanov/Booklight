@@ -299,17 +299,40 @@ static void update_display(uint32_t now_ms)
 
     /* Circular scale bars & charging animation */
     if (vbus_present) {
-        icons |= FH8016_ICON_LIGHTNING;
-        /* Running circle animation while charging */
-        charge_anim_frame = (charge_anim_frame + 1) % 4;
-        bars = charge_anim_frame + 1;
+        /* Мигающая молния при зарядке (такт 500 мс) */
+        if ((now_ms / 500) % 2) {
+            icons |= FH8016_ICON_LIGHTNING;
+        }
         eye_l = eye_r = FH8016_COLOR_CYAN;
-    } else {
-        if (bat_percent >= 75)      bars = 4;
-        else if (bat_percent >= 50) bars = 3;
-        else if (bat_percent >= 25) bars = 2;
-        else if (bat_percent > 5)   bars = 1;
-        else                        bars = 0;
+    }
+
+    /* Шкала по ТЗ: 
+     *  0..20%:  0 делений
+     * 21..40%:  1 деление
+     * 41..60%:  2 деления
+     * 61..80%:  3 деления
+     * 81..100%: 4 деления
+     */
+    if (disp_val >= 81)      bars = 4;
+    else if (disp_val >= 61) bars = 3;
+    else if (disp_val >= 41) bars = 2;
+    else if (disp_val >= 21) bars = 1;
+    else                     bars = 0;
+
+    /* Цвета глаз в зависимости от уровня заряда (если не в режиме диммирования и не на зарядке) */
+    if (now_ms >= show_brightness_until_ms && !vbus_present) {
+        if (bat_percent >= 100) {
+            eye_l = eye_r = FH8016_COLOR_BLUE;
+        } else if (bat_percent >= 67) {
+            eye_l = eye_r = FH8016_COLOR_GREEN;
+        } else if (bat_percent >= 34) {
+            eye_l = eye_r = FH8016_COLOR_YELLOW;
+        } else if (bat_percent >= 15) {
+            eye_l = eye_r = FH8016_COLOR_RED;
+        } else {
+            /* Критический разряд (< 15%): моргающий красный */
+            eye_l = eye_r = ((now_ms / 300) & 1) ? FH8016_COLOR_RED : FH8016_COLOR_OFF;
+        }
     }
 
     fh8016_set_state(&disp, disp_val, bars, icons, eye_l, eye_r);

@@ -1,4 +1,4 @@
-﻿#include "fh8016.h"
+#include "fh8016.h"
 
 // 7-сегментная таблица для цифр 0..9 (биты: a, b, c, d, e, f, g)
 // Стандартные сегменты: a=0x01, b=0x02, c=0x04, d=0x08, e=0x10, f=0x20, g=0x40
@@ -48,9 +48,7 @@ void FH8016Driver::sendBit(bool val) {
 
 void FH8016Driver::sendPacket(uint32_t bits26) {
     setPins(LOW);
-    delayMicroseconds(2000);
-    setPins(HIGH);
-    delayMicroseconds(100);
+    delayMicroseconds(2000);  // RESET — без синк-бита, данные сразу после LOW
 
     for (int i = 0; i < 26; i++) {
         sendBit((bits26 >> i) & 1);
@@ -63,63 +61,50 @@ void FH8016Driver::setRawBits(uint32_t bits26) {
 }
 
 uint32_t FH8016Driver::encodeFrame(uint8_t percent, uint8_t bars, uint8_t icons, fh8016_color_t hl_l, fh8016_color_t hl_r) {
+    if (percent == 0 && bars == 0 && icons == 0 && hl_l == FH8016_COLOR_OFF && hl_r == FH8016_COLOR_OFF) {
+        return 0; // Полный сон дисплея
+    }
+
     uint32_t frame = 0;
-    
-    // Базовая раскладка при 0..100%:
-    // Разделение на десятки и единицы
-    uint8_t tens = (percent / 10) % 10;
-    uint8_t units = percent % 10;
-    bool hundreds = (percent >= 100);
 
-    // 1. Кодирование цифр (чередующиеся биты)
-    uint8_t seg_t = (percent < 10) ? 0 : DIGIT_7SEG[tens];
-    uint8_t seg_u = DIGIT_7SEG[units];
-
-    // Сегменты единиц и десятков
-    for (int k = 0; k < 7; k++) {
-        if ((seg_u >> k) & 1) frame |= (1UL << (2 * k));
-        if ((seg_t >> k) & 1) frame |= (1UL << (2 * k + 1));
+    // 1. Цифры (аппаратный декодер FH8016)
+    if (percent >= 100) {
+        frame |= (1UL << 7); // Бит 7 зажигает сотни '100'
+    } else if (percent > 0) {
+        frame |= (percent & 0x7F); // Число 1..99
     }
 
-    // Старшая единица (100%)
-    if (hundreds) {
-        frame |= (1UL << 7) | (1UL << 9);
+    // 2. Деления круговой шкалы (проверено по камере)
+    if (bars == 1) {
+        frame |= (1UL << 12);                         // 1 деление
+    } else if (bars == 2) {
+        frame |= (1UL << 12) | (1UL << 13);            // 2 деления
+    } else if (bars == 3) {
+        frame |= (1UL << 14);                         // 3 деления
+    } else if (bars >= 4) {
+        frame |= (1UL << 15);                         // 4 деления
     }
 
-    // 2. 4 деления шкалы (бары вокруг иконки)
-    if (bars >= 1) frame |= (1UL << 14); // Bar 1 (нижне-левый)
-    if (bars >= 2) frame |= (1UL << 12); // Bar 2 (нижне-правый)
-    if (bars >= 3) frame |= (1UL << 17); // Bar 3 (верхне-правый)
-    if (bars >= 4) frame |= (1UL << 15); // Bar 4 (верхне-левый)
-
-    // 3. Пиктограммы
-    if (icons & FH8016_ICON_DROPLET)   frame |= (1UL << 0);
-    if (icons & FH8016_ICON_PERCENT)   frame |= (1UL << 16);
-    if (icons & FH8016_ICON_LIGHTNING) frame |= (1UL << 13);
-
-    // 4. Цвета фар (RGB для каждого глаза)
-    // Левая фара:
-    switch (hl_l) {
-        case FH8016_COLOR_RED:     frame |= (1UL << 21); break;
-        case FH8016_COLOR_GREEN:   frame |= (1UL << 18); break;
-        case FH8016_COLOR_BLUE:    frame |= (1UL << 22); break;
-        case FH8016_COLOR_CYAN:    frame |= (1UL << 18) | (1UL << 22); break;
-        case FH8016_COLOR_YELLOW:  frame |= (1UL << 18) | (1UL << 21); break;
-        case FH8016_COLOR_MAGENTA: frame |= (1UL << 21) | (1UL << 22); break;
-        case FH8016_COLOR_WHITE:   frame |= (1UL << 18) | (1UL << 21) | (1UL << 22); break;
-        default: break;
+    // 3. Пиктограмма зарядки (молния)
+    if (icons & FH8016_ICON_LIGHTNING) {
+        frame |= (1UL << 17); // Бит 17 — молния
     }
 
-    // Правая фара:
-    switch (hl_r) {
-        case FH8016_COLOR_RED:     frame |= (1UL << 20); break;
-        case FH8016_COLOR_GREEN:   frame |= (1UL << 19); break;
-        case FH8016_COLOR_BLUE:    frame |= (1UL << 23); break;
-        case FH8016_COLOR_CYAN:    frame |= (1UL << 19) | (1UL << 23); break;
-        case FH8016_COLOR_YELLOW:  frame |= (1UL << 19) | (1UL << 20); break;
-        case FH8016_COLOR_MAGENTA: frame |= (1UL << 20) | (1UL << 23); break;
-        case FH8016_COLOR_WHITE:   frame |= (1UL << 19) | (1UL << 20) | (1UL << 23); break;
-        default: break;
+    // 4. Фары (RGB) — проверено по камере
+    if (hl_l == FH8016_COLOR_RED || hl_l == FH8016_COLOR_YELLOW || hl_l == FH8016_COLOR_MAGENTA || hl_l == FH8016_COLOR_WHITE) {
+        frame |= (1UL << 20); // Общий красный
+    }
+    if (hl_l == FH8016_COLOR_GREEN || hl_l == FH8016_COLOR_YELLOW || hl_l == FH8016_COLOR_BLUE || hl_l == FH8016_COLOR_CYAN || hl_l == FH8016_COLOR_WHITE) {
+        frame |= (1UL << 18); // Нижний зелёный
+    }
+    if (hl_r == FH8016_COLOR_GREEN || hl_r == FH8016_COLOR_YELLOW || hl_r == FH8016_COLOR_BLUE || hl_r == FH8016_COLOR_CYAN || hl_r == FH8016_COLOR_WHITE) {
+        frame |= (1UL << 19); // Верхний зелёный
+    }
+    if (hl_l == FH8016_COLOR_BLUE || hl_l == FH8016_COLOR_CYAN || hl_l == FH8016_COLOR_MAGENTA || hl_l == FH8016_COLOR_WHITE) {
+        frame |= (1UL << 22); // Нижний синий
+    }
+    if (hl_r == FH8016_COLOR_BLUE || hl_r == FH8016_COLOR_CYAN || hl_r == FH8016_COLOR_MAGENTA || hl_r == FH8016_COLOR_WHITE) {
+        frame |= (1UL << 23); // Верхний синий
     }
 
     return frame;

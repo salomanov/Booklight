@@ -1,18 +1,5 @@
 #include "fh8016_py32.h"
 
-// 7-segment lookup for digits 0..9 (segments: a, b, c, d, e, f, g)
-static const uint8_t DIGIT_7SEG[10] = {
-    0x3F, // 0: a, b, c, d, e, f
-    0x06, // 1: b, c
-    0x5B, // 2: a, b, d, e, g
-    0x4F, // 3: a, b, c, d, g
-    0x66, // 4: b, c, f, g
-    0x6D, // 5: a, c, d, f, g
-    0x7D, // 6: a, c, d, e, f, g
-    0x07, // 7: a, b, c
-    0x7F, // 8: a, b, c, d, e, f, g
-    0x6F  // 9: a, b, c, d, f, g
-};
 
 // Calibrated microsecond delay for Cortex-M0+ at 24 MHz
 // Each iteration of (sub, bne) takes 3 cycles.
@@ -73,60 +60,50 @@ void fh8016_init(fh8016_t *dev, GPIO_TypeDef *port, uint16_t pin) {
 
 uint32_t fh8016_encode_frame(uint8_t percent, uint8_t bars, uint8_t icons, 
                              fh8016_color_t hl_l, fh8016_color_t hl_r) {
+    if (percent == 0 && bars == 0 && icons == 0 && hl_l == FH8016_COLOR_OFF && hl_r == FH8016_COLOR_OFF) {
+        return 0; // Полный сон дисплея
+    }
+
     uint32_t frame = 0;
 
-    uint8_t tens = (percent / 10) % 10;
-    uint8_t units = percent % 10;
-    bool hundreds = (percent >= 100);
-
-    // 1. Digits (interleaved segments)
-    uint8_t seg_t = (percent < 10) ? 0 : DIGIT_7SEG[tens];
-    uint8_t seg_u = DIGIT_7SEG[units];
-
-    for (int k = 0; k < 7; k++) {
-        if ((seg_u >> k) & 1) frame |= (1UL << (2 * k));
-        if ((seg_t >> k) & 1) frame |= (1UL << (2 * k + 1));
+    // 1. Цифры (аппаратный декодер FH8016)
+    if (percent >= 100) {
+        frame |= (1UL << 7); // Бит 7 зажигает сотни '100'
+    } else if (percent > 0) {
+        frame |= (percent & 0x7F); // Число 1..99
     }
 
-    // Hundreds digit '1'
-    if (hundreds) {
-        frame |= (1UL << 7) | (1UL << 9);
+    // 2. Деления круговой шкалы (проверено по камере)
+    if (bars == 1) {
+        frame |= (1UL << 12);                         // 1 деление
+    } else if (bars == 2) {
+        frame |= (1UL << 12) | (1UL << 13);            // 2 деления
+    } else if (bars == 3) {
+        frame |= (1UL << 14);                         // 3 деления
+    } else if (bars >= 4) {
+        frame |= (1UL << 15);                         // 4 деления
     }
 
-    // 2. 4 divisions of circular scale (25%, 50%, 75%, 100%)
-    if (bars >= 1) frame |= (1UL << 14); // Lower-Left arc
-    if (bars >= 2) frame |= (1UL << 12); // Lower-Right arc
-    if (bars >= 3) frame |= (1UL << 17); // Upper-Right arc
-    if (bars >= 4) frame |= (1UL << 15); // Upper-Left arc
-
-    // 3. Icons
-    if (icons & FH8016_ICON_DROPLET)   frame |= (1UL << 0);
-    if (icons & FH8016_ICON_PERCENT)   frame |= (1UL << 16);
-    if (icons & FH8016_ICON_LIGHTNING) frame |= (1UL << 13);
-
-    // 4. Headlights RGB
-    // Left eye:
-    switch (hl_l) {
-        case FH8016_COLOR_RED:     frame |= (1UL << 21); break;
-        case FH8016_COLOR_GREEN:   frame |= (1UL << 18); break;
-        case FH8016_COLOR_BLUE:    frame |= (1UL << 22); break;
-        case FH8016_COLOR_CYAN:    frame |= (1UL << 18) | (1UL << 22); break;
-        case FH8016_COLOR_YELLOW:  frame |= (1UL << 18) | (1UL << 21); break;
-        case FH8016_COLOR_MAGENTA: frame |= (1UL << 21) | (1UL << 22); break;
-        case FH8016_COLOR_WHITE:   frame |= (1UL << 18) | (1UL << 21) | (1UL << 22); break;
-        default: break;
+    // 3. Пиктограмма зарядки (молния)
+    if (icons & FH8016_ICON_LIGHTNING) {
+        frame |= (1UL << 17); // Бит 17 — молния
     }
 
-    // Right eye:
-    switch (hl_r) {
-        case FH8016_COLOR_RED:     frame |= (1UL << 20); break;
-        case FH8016_COLOR_GREEN:   frame |= (1UL << 19); break;
-        case FH8016_COLOR_BLUE:    frame |= (1UL << 23); break;
-        case FH8016_COLOR_CYAN:    frame |= (1UL << 19) | (1UL << 23); break;
-        case FH8016_COLOR_YELLOW:  frame |= (1UL << 19) | (1UL << 20); break;
-        case FH8016_COLOR_MAGENTA: frame |= (1UL << 20) | (1UL << 23); break;
-        case FH8016_COLOR_WHITE:   frame |= (1UL << 19) | (1UL << 20) | (1UL << 23); break;
-        default: break;
+    // 4. Фары (RGB) — проверено по камере
+    if (hl_l == FH8016_COLOR_RED || hl_l == FH8016_COLOR_YELLOW || hl_l == FH8016_COLOR_MAGENTA || hl_l == FH8016_COLOR_WHITE) {
+        frame |= (1UL << 20); // Общий красный
+    }
+    if (hl_l == FH8016_COLOR_GREEN || hl_l == FH8016_COLOR_YELLOW || hl_l == FH8016_COLOR_BLUE || hl_l == FH8016_COLOR_CYAN || hl_l == FH8016_COLOR_WHITE) {
+        frame |= (1UL << 18); // Нижний зелёный
+    }
+    if (hl_r == FH8016_COLOR_GREEN || hl_r == FH8016_COLOR_YELLOW || hl_r == FH8016_COLOR_BLUE || hl_r == FH8016_COLOR_CYAN || hl_r == FH8016_COLOR_WHITE) {
+        frame |= (1UL << 19); // Верхний зелёный
+    }
+    if (hl_l == FH8016_COLOR_BLUE || hl_l == FH8016_COLOR_CYAN || hl_l == FH8016_COLOR_MAGENTA || hl_l == FH8016_COLOR_WHITE) {
+        frame |= (1UL << 22); // Нижний синий
+    }
+    if (hl_r == FH8016_COLOR_BLUE || hl_r == FH8016_COLOR_CYAN || hl_r == FH8016_COLOR_MAGENTA || hl_r == FH8016_COLOR_WHITE) {
+        frame |= (1UL << 23); // Верхний синий
     }
 
     return frame;
@@ -144,19 +121,15 @@ void fh8016_set_raw(fh8016_t *dev, uint32_t raw_bits26) {
 void fh8016_update(fh8016_t *dev) {
     uint32_t bits = dev->raw_frame;
 
-    // Sync Break: 2000 us LOW
+    // Reset: 2000 us LOW (без паразитного импульса после сброса)
     set_pin(dev, 0);
     delay_us(2000);
 
-    // Mark after break: 100 us HIGH
-    set_pin(dev, 1);
-    delay_us(100);
-
-    // 26 data bits, LSB first
+    // 26 data bits, LSB first (начинается сразу после LOW)
     for (int i = 0; i < 26; i++) {
         send_bit(dev, (bits >> i) & 1);
     }
 
-    // Return to idle HIGH
+    // Возврат в idle HIGH
     set_pin(dev, 1);
 }

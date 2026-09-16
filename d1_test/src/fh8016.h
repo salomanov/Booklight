@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <Arduino.h>
 
 // Цвета для RGB фар
@@ -27,6 +27,7 @@ public:
     // Установка параметров экрана
     void setState(uint8_t percent_0_100, uint8_t bars_0_4, uint8_t icons, fh8016_color_t hl_left, fh8016_color_t hl_right);
     void setRawBits(uint32_t bits26);
+    uint32_t encodeFrame(uint8_t percent, uint8_t bars, uint8_t icons, fh8016_color_t hl_left, fh8016_color_t hl_right);
     
     // Отправка кадра (вызывать периодически, ~20-50 Гц)
     void update();
@@ -39,5 +40,4 @@ private:
     void setPins(int level);
     void sendBit(bool val);
     void sendPacket(uint32_t bits26);
-    uint32_t encodeFrame(uint8_t percent, uint8_t bars, uint8_t icons, fh8016_color_t hl_left, fh8016_color_t hl_right);
 };
