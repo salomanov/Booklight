@@ -19,7 +19,7 @@ static ubutton_t touch_btn;
 static ADC_HandleTypeDef hadc_bat;
 
 /* Lamp State Machine */
-static volatile lamp_state_t lamp_state = LAMP_STATE_SLEEP;
+static volatile lamp_state_t lamp_state = LAMP_STATE_BOOT_WAIT;
 static volatile uint8_t current_brightness = 0;        /* 0..100 */
 static uint8_t saved_brightness = DEFAULT_BRIGHTNESS_PERCENT;
 
@@ -69,12 +69,12 @@ void book_light_init(void)
     /* Initialize 1-Wire FH8016 display */
     fh8016_init(&disp, BOOK_LIGHT_DISP_PORT, BOOK_LIGHT_DISP_PIN);
 
-    /* Blank display on boot */
-    fh8016_set_raw(&disp, 0);
-    fh8016_update(&disp);
-
     /* Initial battery sample */
     update_battery_measure();
+
+    /* Startup Grace Window: stay awake for 3s, show battery %, keep SWD 100% accessible */
+    lamp_state = LAMP_STATE_BOOT_WAIT;
+    state_timer = HAL_GetTick();
 }
 
 static void init_gpio(void)
@@ -227,6 +227,23 @@ static void on_touch_down(uint32_t now)
     press_start_time = now;
     btn_pressed = true;
 
+    /* Low-voltage safety cutoff: prevent ramping or reading on drained cell (< 3.10V) */
+    if (bat_millivolts < BATTERY_CUTOFF_MV && !vbus_present) {
+        if (lamp_state != LAMP_STATE_BOOT_WAIT && lamp_state != LAMP_STATE_SLEEP) {
+            lamp_state = LAMP_STATE_SLEEP;
+            current_brightness = 0;
+            pwm_duty = 0;
+        }
+        return;
+    }
+
+    /* 0. If in boot grace window: touch transitions to battery awake */
+    if (lamp_state == LAMP_STATE_BOOT_WAIT) {
+        lamp_state = LAMP_STATE_AWAKE_BATTERY;
+        state_timer = now;
+        return;
+    }
+
     /* 1. If 60s auto-fadeout is in progress: short tap cancels fade and restores reading */
     if (lamp_state == LAMP_STATE_AUTO_FADING) {
         lamp_state = LAMP_STATE_READING;
@@ -289,13 +306,22 @@ static void on_touch_up(uint32_t now)
 
 static void update_state_machine(uint32_t now)
 {
-    /* 1. Hold >1.5s in sleep to wake up and show battery */
+    /* 0. Startup Grace Window (Keeps SWD active for 3s on boot, shows battery) */
+    if (lamp_state == LAMP_STATE_BOOT_WAIT) {
+        if (!btn_pressed && (now - state_timer >= BOOT_GRACE_PERIOD_MS)) {
+            lamp_state = LAMP_STATE_SLEEP;
+        }
+    }
+
+    /* 1. Hold >1.5s in sleep to wake up and show battery (if battery OK) */
     if (lamp_state == LAMP_STATE_SLEEP && btn_pressed) {
-        if (now - press_start_time >= HOLD_TO_WAKE_MS) {
-            lamp_state = LAMP_STATE_AWAKE_BATTERY;
-            state_timer = now;
-            current_brightness = 0;
-            pwm_duty = 0;
+        if (bat_millivolts >= BATTERY_CUTOFF_MV || vbus_present) {
+            if (now - press_start_time >= HOLD_TO_WAKE_MS) {
+                lamp_state = LAMP_STATE_AWAKE_BATTERY;
+                state_timer = now;
+                current_brightness = 0;
+                pwm_duty = 0;
+            }
         }
     }
 
@@ -419,7 +445,7 @@ static void update_display_hardware(uint32_t now)
     uint8_t disp_val = 0;
     fh8016_color_t eye = FH8016_COLOR_CYAN;
 
-    if (lamp_state == LAMP_STATE_AWAKE_BATTERY) {
+    if (lamp_state == LAMP_STATE_BOOT_WAIT || lamp_state == LAMP_STATE_AWAKE_BATTERY) {
         disp_val = bat_percent;
         if (bat_percent >= 100)      eye = FH8016_COLOR_BLUE;
         else if (bat_percent >= 67)  eye = FH8016_COLOR_GREEN;
@@ -498,18 +524,26 @@ void book_light_loop(void)
 {
     uint32_t now = HAL_GetTick();
 
-    /* 1. Read Touch Pin and Detect Press/Release Edges */
+    /* 1. Read Touch Pin and Debounce with 35 ms noise filter */
     GPIO_PinState pin_state = HAL_GPIO_ReadPin(BOOK_LIGHT_TOUCH_PORT, BOOK_LIGHT_TOUCH_PIN);
 #if BOOK_LIGHT_TOUCH_ACTIVE_HIGH
-    bool pin_active = (pin_state == GPIO_PIN_SET);
+    bool raw_active = (pin_state == GPIO_PIN_SET);
 #else
-    bool pin_active = (pin_state == GPIO_PIN_RESET);
+    bool raw_active = (pin_state == GPIO_PIN_RESET);
 #endif
 
-    static bool last_pin_active = false;
-    if (pin_active != last_pin_active) {
-        last_pin_active = pin_active;
-        if (pin_active) {
+    static bool debounced_active = false;
+    static bool last_raw_sample = false;
+    static uint32_t last_raw_toggle_time = 0;
+
+    if (raw_active != last_raw_sample) {
+        last_raw_sample = raw_active;
+        last_raw_toggle_time = now;
+    }
+
+    if ((now - last_raw_toggle_time >= TOUCH_DEBOUNCE_MS) && (debounced_active != raw_active)) {
+        debounced_active = raw_active;
+        if (debounced_active) {
             on_touch_down(now);
         } else {
             on_touch_up(now);

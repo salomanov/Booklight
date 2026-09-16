@@ -34,12 +34,15 @@
  * Operating Parameters & Timing
  * ========================================================================== */
 
+#define BOOT_GRACE_PERIOD_MS            3000UL                  /* 3s boot grace window: keeps SWD active and shows battery */
 #define HOLD_TO_WAKE_MS                 1500UL                  /* >1.5s hold to prevent accidental wakeup */
 #define AWAKE_BATTERY_TIMEOUT_MS        5000UL                  /* 5s battery % display before auto-sleep */
 #define DISP_OFF_DELAY_MS               3000UL                  /* 3s display delay before blanking */
 #define INACTIVITY_TIMEOUT_MS           (15UL * 60UL * 1000UL)  /* 15 minutes reading inactivity timer */
 #define AUTO_FADEOUT_DURATION_MS        (60UL * 1000UL)         /* 60 seconds linear fadeout */
 #define RAMP_STEP_MS                    25U                     /* 25 ms per 1% brightness change */
+#define TOUCH_DEBOUNCE_MS               35U                     /* 35 ms touch button debounce filter */
+#define BATTERY_CUTOFF_MV               3100U                   /* 3.10V low-voltage safety cutoff for Li-ion */
 
 #define MIN_BRIGHTNESS_PERCENT          5U                      /* 5% nightlight floor */
 #define MAX_BRIGHTNESS_PERCENT          100U                    /* 100% full reading brightness */
@@ -50,7 +53,8 @@
  * ========================================================================== */
 
 typedef enum {
-    LAMP_STATE_SLEEP = 0,             /* Full sleep: filament off, display off */
+    LAMP_STATE_BOOT_WAIT = 0,         /* Startup grace window: core awake, SWD accessible, shows battery */
+    LAMP_STATE_SLEEP,                 /* Full sleep: filament off, display off */
     LAMP_STATE_AWAKE_BATTERY,         /* Wakeup after >1.5s: filament off, display shows battery % */
     LAMP_STATE_RAMPING_UP,            /* Button held: brightness ramps 0..100%, display shows % */
     LAMP_STATE_HOLD_BRIGHTNESS_WAIT,  /* Button released: brightness locked, display waits 3s */

@@ -121,6 +121,10 @@ void fh8016_set_raw(fh8016_t *dev, uint32_t raw_bits26) {
 void fh8016_update(fh8016_t *dev) {
     uint32_t bits = dev->raw_frame;
 
+    /* Critical section: protect 1-Wire bit timing from 20 kHz SysTick interruption */
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+
     // Reset: 2000 us LOW (без паразитного импульса после сброса)
     set_pin(dev, 0);
     delay_us(2000);
@@ -132,4 +136,8 @@ void fh8016_update(fh8016_t *dev) {
 
     // Возврат в idle HIGH
     set_pin(dev, 1);
+
+    if (!primask) {
+        __enable_irq();
+    }
 }
