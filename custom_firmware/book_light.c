@@ -18,32 +18,30 @@ static ubutton_t touch_btn;
 /* ADC Handle for Battery Reading */
 static ADC_HandleTypeDef hadc_bat;
 
-/* Lamp State */
-static volatile lamp_state_t lamp_state = LAMP_STATE_OFF;
+/* Lamp State Machine */
+static volatile lamp_state_t lamp_state = LAMP_STATE_SLEEP;
 static volatile uint8_t current_brightness = 0;        /* 0..100 */
-static volatile uint8_t target_brightness = 0;         /* 0..100 */
 static uint8_t saved_brightness = DEFAULT_BRIGHTNESS_PERCENT;
-static int8_t dim_direction = 1;                       /* +1 = brightening, -1 = dimming */
-static bool auto_fade_cancelled = false;               /* Tracks if touch interrupted auto-fadeout */
+
+/* Touch & State Timers */
+static bool btn_pressed = false;
+static uint32_t press_start_time = 0;
+static uint32_t state_timer = 0;
+static uint32_t last_ramp_tick = 0;
+static uint32_t reading_start_time = 0;
+static uint32_t auto_fade_start_time = 0;
+static uint8_t  auto_fade_start_brightness = 0;
 
 /* Fast PWM state (used inside 20 kHz SysTick) */
 static volatile uint8_t pwm_counter = 0;
 static volatile uint8_t pwm_duty = 0;                  /* 0..100 */
 
-/* Timers (incremented in 1 ms SysTick) */
-static volatile uint32_t inactivity_timer_ms = 0;
-static volatile uint32_t auto_fade_timer_ms = 0;
-static volatile uint8_t  auto_fade_start_brightness = 0;
-static volatile uint16_t fade_step_timer_ms = 0;
-
 /* Battery monitoring */
 static uint16_t bat_millivolts = 3900;
-static uint8_t  bat_percent = 80;
+static uint8_t  bat_percent = 85;
 static bool     vbus_present = false;
 static uint32_t last_bat_sample_ms = 0;
 static uint32_t last_disp_update_ms = 0;
-static uint8_t  charge_anim_frame = 0;
-static uint32_t show_brightness_until_ms = 0;
 
 /* ==========================================================================
  * Internal Prototypes
@@ -52,7 +50,10 @@ static void init_gpio(void);
 static void init_adc(void);
 static void update_battery_measure(void);
 static uint8_t calc_battery_percent(uint16_t mv);
-static void update_display(uint32_t now_ms);
+static void update_display_hardware(uint32_t now);
+static void update_state_machine(uint32_t now);
+static void on_touch_down(uint32_t now);
+static void on_touch_up(uint32_t now);
 static void enter_deep_sleep(void);
 
 /* ==========================================================================
@@ -177,51 +178,7 @@ void book_light_pwm_tick(void)
 
 void book_light_tick_1ms(void)
 {
-    /* 1. Manual Fade In / Fade Out Transitions (~350 ms) */
-    if (lamp_state == LAMP_STATE_FADE_IN || lamp_state == LAMP_STATE_FADE_OUT) {
-        if (++fade_step_timer_ms >= (MANUAL_FADE_DURATION_MS / 100)) {
-            fade_step_timer_ms = 0;
-            if (current_brightness < target_brightness) {
-                current_brightness++;
-                pwm_duty = gyver_gamma2(current_brightness);
-                if (current_brightness >= target_brightness) {
-                    lamp_state = LAMP_STATE_ON;
-                    inactivity_timer_ms = 0;
-                }
-            } else if (current_brightness > target_brightness) {
-                current_brightness--;
-                pwm_duty = gyver_gamma2(current_brightness);
-                if (current_brightness == 0) {
-                    lamp_state = LAMP_STATE_OFF;
-                }
-            }
-        }
-    }
-
-    /* 2. 15-Minute Inactivity Monitoring */
-    if (lamp_state == LAMP_STATE_ON) {
-        inactivity_timer_ms++;
-        if (inactivity_timer_ms >= INACTIVITY_TIMEOUT_MS) {
-            /* 15 minutes of inactivity reached: begin smooth 60s auto fade-out */
-            lamp_state = LAMP_STATE_AUTO_FADING;
-            auto_fade_timer_ms = 0;
-            auto_fade_start_brightness = current_brightness;
-        }
-    }
-
-    /* 3. 60-Second Linear Fade-Out to 0 */
-    if (lamp_state == LAMP_STATE_AUTO_FADING) {
-        auto_fade_timer_ms++;
-        if (auto_fade_timer_ms >= AUTO_FADEOUT_DURATION_MS) {
-            current_brightness = 0;
-            pwm_duty = 0;
-            lamp_state = LAMP_STATE_OFF;
-        } else {
-            uint32_t remaining = AUTO_FADEOUT_DURATION_MS - auto_fade_timer_ms;
-            current_brightness = (uint8_t)((auto_fade_start_brightness * remaining) / AUTO_FADEOUT_DURATION_MS);
-            pwm_duty = gyver_gamma2(current_brightness);
-        }
-    }
+    /* 1 ms timebase incremented via HAL_IncTick in SysTick */
 }
 
 /* ==========================================================================
@@ -262,80 +219,227 @@ static uint8_t calc_battery_percent(uint16_t mv)
 }
 
 /* ==========================================================================
- * Display State Update
+ * Touch Button Handlers
  * ========================================================================== */
 
-static void update_display(uint32_t now_ms)
+static void on_touch_down(uint32_t now)
 {
-    /* If lamp is OFF and not charging, display is completely turned OFF */
-    if (lamp_state == LAMP_STATE_OFF && !vbus_present) {
+    press_start_time = now;
+    btn_pressed = true;
+
+    /* 1. If 60s auto-fadeout is in progress: short tap cancels fade and restores reading */
+    if (lamp_state == LAMP_STATE_AUTO_FADING) {
+        lamp_state = LAMP_STATE_READING;
+        current_brightness = saved_brightness;
+        pwm_duty = gyver_gamma2(current_brightness);
+        reading_start_time = now; /* Reset 15-minute timer */
+        return;
+    }
+
+    /* 2. If awake showing battery: press starts ramping up brightness */
+    if (lamp_state == LAMP_STATE_AWAKE_BATTERY) {
+        lamp_state = LAMP_STATE_RAMPING_UP;
+        current_brightness = 0;
+        pwm_duty = 0;
+        last_ramp_tick = now;
+        return;
+    }
+
+    /* 3. If reading: press starts ramping down brightness towards 0 */
+    if (lamp_state == LAMP_STATE_READING || lamp_state == LAMP_STATE_HOLD_BRIGHTNESS_WAIT) {
+        lamp_state = LAMP_STATE_RAMPING_DOWN;
+        last_ramp_tick = now;
+        return;
+    }
+}
+
+static void on_touch_up(uint32_t now)
+{
+    btn_pressed = false;
+
+    /* 1. Was ramping up: lock selected brightness and wait 3s */
+    if (lamp_state == LAMP_STATE_RAMPING_UP) {
+        if (current_brightness > 0) {
+            saved_brightness = current_brightness;
+            lamp_state = LAMP_STATE_HOLD_BRIGHTNESS_WAIT;
+            state_timer = now;
+        } else {
+            lamp_state = LAMP_STATE_SLEEP;
+        }
+        return;
+    }
+
+    /* 2. Was ramping down: if >0 lock brightness, if 0 wait 3s then sleep */
+    if (lamp_state == LAMP_STATE_RAMPING_DOWN) {
+        if (current_brightness > 0) {
+            saved_brightness = current_brightness;
+            lamp_state = LAMP_STATE_HOLD_BRIGHTNESS_WAIT;
+            state_timer = now;
+        } else {
+            lamp_state = LAMP_STATE_ZERO_WAIT;
+            state_timer = now;
+        }
+        return;
+    }
+}
+
+/* ==========================================================================
+ * State Machine Update
+ * ========================================================================== */
+
+static void update_state_machine(uint32_t now)
+{
+    /* 1. Hold >1.5s in sleep to wake up and show battery */
+    if (lamp_state == LAMP_STATE_SLEEP && btn_pressed) {
+        if (now - press_start_time >= HOLD_TO_WAKE_MS) {
+            lamp_state = LAMP_STATE_AWAKE_BATTERY;
+            state_timer = now;
+            current_brightness = 0;
+            pwm_duty = 0;
+        }
+    }
+
+    /* 2. Battery display timeout: 5s without press -> return to sleep */
+    if (lamp_state == LAMP_STATE_AWAKE_BATTERY) {
+        if (!btn_pressed && (now - state_timer >= AWAKE_BATTERY_TIMEOUT_MS)) {
+            lamp_state = LAMP_STATE_SLEEP;
+        }
+    }
+
+    /* 3. Smooth brightness ramp-up while held (+1% every 25 ms) */
+    if (lamp_state == LAMP_STATE_RAMPING_UP && btn_pressed) {
+        if (now - last_ramp_tick >= RAMP_STEP_MS) {
+            last_ramp_tick = now;
+            if (current_brightness < MAX_BRIGHTNESS_PERCENT) {
+                current_brightness++;
+                pwm_duty = gyver_gamma2(current_brightness);
+            }
+        }
+    }
+
+    /* 4. Display timeout (3s) after locking brightness */
+    if (lamp_state == LAMP_STATE_HOLD_BRIGHTNESS_WAIT) {
+        if (now - state_timer >= DISP_OFF_DELAY_MS) {
+            lamp_state = LAMP_STATE_READING;
+            reading_start_time = now; /* Start 15-minute inactivity timer */
+        }
+    }
+
+    /* 5. Smooth brightness ramp-down while held (-1% every 25 ms) */
+    if (lamp_state == LAMP_STATE_RAMPING_DOWN && btn_pressed) {
+        if (now - last_ramp_tick >= RAMP_STEP_MS) {
+            last_ramp_tick = now;
+            if (current_brightness > 0) {
+                current_brightness--;
+                pwm_duty = gyver_gamma2(current_brightness);
+            }
+        }
+    }
+
+    /* 6. Brightness reached 0: wait 3s with '00' on screen then enter sleep */
+    if (lamp_state == LAMP_STATE_ZERO_WAIT) {
+        if (now - state_timer >= DISP_OFF_DELAY_MS) {
+            lamp_state = LAMP_STATE_SLEEP;
+            current_brightness = 0;
+            pwm_duty = 0;
+        }
+    }
+
+    /* 7. 15-minute reading inactivity check */
+    if (lamp_state == LAMP_STATE_READING) {
+        if (now - reading_start_time >= INACTIVITY_TIMEOUT_MS) {
+            lamp_state = LAMP_STATE_AUTO_FADING;
+            auto_fade_start_time = now;
+            auto_fade_start_brightness = current_brightness;
+        }
+    }
+
+    /* 8. 60-second linear auto-fadeout */
+    if (lamp_state == LAMP_STATE_AUTO_FADING) {
+        uint32_t elapsed = now - auto_fade_start_time;
+        if (elapsed >= AUTO_FADEOUT_DURATION_MS) {
+            current_brightness = 0;
+            pwm_duty = 0;
+            lamp_state = LAMP_STATE_SLEEP;
+        } else {
+            uint32_t remaining = AUTO_FADEOUT_DURATION_MS - elapsed;
+            current_brightness = (uint8_t)((auto_fade_start_brightness * remaining) / AUTO_FADEOUT_DURATION_MS);
+            pwm_duty = gyver_gamma2(current_brightness);
+        }
+    }
+}
+
+/* ==========================================================================
+ * Display Hardware Update
+ * ========================================================================== */
+
+static void update_display_hardware(uint32_t now)
+{
+    /* 1. USB-C Charging overlay: display stays ON constantly */
+    if (vbus_present) {
+        uint8_t bars = 0;
+        if (bat_percent >= 81)      bars = 4;
+        else if (bat_percent >= 61) bars = 3;
+        else if (bat_percent >= 41) bars = 2;
+        else if (bat_percent >= 21) bars = 1;
+
+        uint8_t icons = FH8016_ICON_PERCENT;
+        if ((now / 500) % 2) {
+            icons |= FH8016_ICON_LIGHTNING;
+        }
+        fh8016_set_state(&disp, bat_percent, bars, icons, FH8016_COLOR_CYAN, FH8016_COLOR_CYAN);
+        fh8016_update(&disp);
+        return;
+    }
+
+    /* 2. When completely asleep, display is off */
+    if (lamp_state == LAMP_STATE_SLEEP) {
         fh8016_set_raw(&disp, 0);
         fh8016_update(&disp);
         return;
     }
 
-    uint8_t disp_val;
-    uint8_t icons = FH8016_ICON_PERCENT;
-    uint8_t bars;
-    fh8016_color_t eye_l = FH8016_COLOR_GREEN;
-    fh8016_color_t eye_r = FH8016_COLOR_GREEN;
-
-    /* Display Mode: Brightness level during dimming OR Battery % normally */
-    if (now_ms < show_brightness_until_ms) {
-        disp_val = current_brightness;
-        eye_l = FH8016_COLOR_CYAN;
-        eye_r = FH8016_COLOR_CYAN;
-    } else {
-        disp_val = bat_percent;
-        if (bat_percent > 30) {
-            eye_l = eye_r = FH8016_COLOR_GREEN;
-        } else if (bat_percent > 15) {
-            eye_l = eye_r = FH8016_COLOR_YELLOW;
+    /* 3. Reading mode or Auto-fading: display is OFF to protect eyes */
+    if (lamp_state == LAMP_STATE_READING || lamp_state == LAMP_STATE_AUTO_FADING) {
+        /* Low battery alert (< 10%): gentle red headlights blink 150 ms every 3.5s */
+        if (bat_percent < 10) {
+            if ((now % 3500) < 150) {
+                fh8016_set_state(&disp, 0, 0, FH8016_ICON_NONE, FH8016_COLOR_RED, FH8016_COLOR_RED);
+            } else {
+                fh8016_set_raw(&disp, 0);
+            }
         } else {
-            /* Critical battery warning (< 15%): blink headlights red */
-            eye_l = eye_r = ((now_ms / 300) & 1) ? FH8016_COLOR_RED : FH8016_COLOR_OFF;
+            fh8016_set_raw(&disp, 0);
         }
+        fh8016_update(&disp);
+        return;
     }
 
-    /* Circular scale bars & charging animation */
-    if (vbus_present) {
-        /* Мигающая молния при зарядке (такт 500 мс) */
-        if ((now_ms / 500) % 2) {
-            icons |= FH8016_ICON_LIGHTNING;
-        }
-        eye_l = eye_r = FH8016_COLOR_CYAN;
+    /* 4. Display active during wake battery check, ramp up, ramp down, and hold wait */
+    uint8_t disp_val = 0;
+    fh8016_color_t eye = FH8016_COLOR_CYAN;
+
+    if (lamp_state == LAMP_STATE_AWAKE_BATTERY) {
+        disp_val = bat_percent;
+        if (bat_percent >= 100)      eye = FH8016_COLOR_BLUE;
+        else if (bat_percent >= 67)  eye = FH8016_COLOR_GREEN;
+        else if (bat_percent >= 34)  eye = FH8016_COLOR_YELLOW;
+        else                         eye = FH8016_COLOR_RED;
+    } else if (lamp_state == LAMP_STATE_RAMPING_UP ||
+               lamp_state == LAMP_STATE_HOLD_BRIGHTNESS_WAIT ||
+               lamp_state == LAMP_STATE_RAMPING_DOWN ||
+               lamp_state == LAMP_STATE_ZERO_WAIT) {
+        disp_val = current_brightness;
+        eye = (lamp_state == LAMP_STATE_ZERO_WAIT) ? FH8016_COLOR_RED : FH8016_COLOR_CYAN;
     }
 
-    /* Шкала по ТЗ: 
-     *  0..20%:  0 делений
-     * 21..40%:  1 деление
-     * 41..60%:  2 деления
-     * 61..80%:  3 деления
-     * 81..100%: 4 деления
-     */
+    uint8_t bars = 0;
     if (disp_val >= 81)      bars = 4;
     else if (disp_val >= 61) bars = 3;
     else if (disp_val >= 41) bars = 2;
     else if (disp_val >= 21) bars = 1;
-    else                     bars = 0;
 
-    /* Цвета глаз в зависимости от уровня заряда (если не в режиме диммирования и не на зарядке) */
-    if (now_ms >= show_brightness_until_ms && !vbus_present) {
-        if (bat_percent >= 100) {
-            eye_l = eye_r = FH8016_COLOR_BLUE;
-        } else if (bat_percent >= 67) {
-            eye_l = eye_r = FH8016_COLOR_GREEN;
-        } else if (bat_percent >= 34) {
-            eye_l = eye_r = FH8016_COLOR_YELLOW;
-        } else if (bat_percent >= 15) {
-            eye_l = eye_r = FH8016_COLOR_RED;
-        } else {
-            /* Критический разряд (< 15%): моргающий красный */
-            eye_l = eye_r = ((now_ms / 300) & 1) ? FH8016_COLOR_RED : FH8016_COLOR_OFF;
-        }
-    }
-
-    fh8016_set_state(&disp, disp_val, bars, icons, eye_l, eye_r);
+    fh8016_set_state(&disp, disp_val, bars, FH8016_ICON_PERCENT, eye, eye);
     fh8016_update(&disp);
 }
 
@@ -369,16 +473,11 @@ static void enter_deep_sleep(void)
     bool wakeup_active = (pin == GPIO_PIN_RESET);
 #endif
 
-    /* Reset uButton state */
-    ubutton_reset(&touch_btn);
-    auto_fade_cancelled = false;
-
     if (wakeup_active) {
-        /* Smoothly turn ON lamp */
-        target_brightness = (saved_brightness >= MIN_BRIGHTNESS_PERCENT) ? saved_brightness : DEFAULT_BRIGHTNESS_PERCENT;
-        lamp_state = LAMP_STATE_FADE_IN;
-        fade_step_timer_ms = 0;
-        inactivity_timer_ms = 0;
+        btn_pressed = true;
+        press_start_time = HAL_GetTick();
+    } else {
+        btn_pressed = false;
     }
 }
 
@@ -399,7 +498,7 @@ void book_light_loop(void)
 {
     uint32_t now = HAL_GetTick();
 
-    /* 1. Read Touch Pin and Tick Gyver uButton State Machine */
+    /* 1. Read Touch Pin and Detect Press/Release Edges */
     GPIO_PinState pin_state = HAL_GPIO_ReadPin(BOOK_LIGHT_TOUCH_PORT, BOOK_LIGHT_TOUCH_PIN);
 #if BOOK_LIGHT_TOUCH_ACTIVE_HIGH
     bool pin_active = (pin_state == GPIO_PIN_SET);
@@ -407,86 +506,33 @@ void book_light_loop(void)
     bool pin_active = (pin_state == GPIO_PIN_RESET);
 #endif
 
-    ubutton_tick(&touch_btn, pin_active, now);
-
-    /* --- Gyver uButton Event Dispatching --- */
-
-    /* A. Touch Press Down Event */
-    if (ubutton_press(&touch_btn)) {
-        /* INTERRUPT FADE-OUT: Touching button during 60s fade cancels fade and restores reading level */
-        if (lamp_state == LAMP_STATE_AUTO_FADING) {
-            target_brightness = (saved_brightness >= MIN_BRIGHTNESS_PERCENT) ? saved_brightness : DEFAULT_BRIGHTNESS_PERCENT;
-            lamp_state = LAMP_STATE_FADE_IN;
-            fade_step_timer_ms = 0;
-            inactivity_timer_ms = 0;
-            auto_fade_cancelled = true;
-        }
-    }
-
-    /* B. Short Click (< 400 ms) Event -> Toggle Light ON / OFF */
-    if (ubutton_click(&touch_btn)) {
-        if (auto_fade_cancelled) {
-            /* If this click was the touch that interrupted auto-fade, keep lamp ON */
-            auto_fade_cancelled = false;
+    static bool last_pin_active = false;
+    if (pin_active != last_pin_active) {
+        last_pin_active = pin_active;
+        if (pin_active) {
+            on_touch_down(now);
         } else {
-            if (lamp_state == LAMP_STATE_OFF) {
-                target_brightness = (saved_brightness >= MIN_BRIGHTNESS_PERCENT) ? saved_brightness : DEFAULT_BRIGHTNESS_PERCENT;
-                lamp_state = LAMP_STATE_FADE_IN;
-                fade_step_timer_ms = 0;
-                inactivity_timer_ms = 0;
-            } else if (lamp_state == LAMP_STATE_ON || lamp_state == LAMP_STATE_FADE_IN) {
-                target_brightness = 0;
-                lamp_state = LAMP_STATE_FADE_OUT;
-                fade_step_timer_ms = 0;
-            }
+            on_touch_up(now);
         }
     }
 
-    /* C. Step Event during Long-Press Hold (fires every UB_STEP_PRD_MS = 25 ms) */
-    if (ubutton_step(&touch_btn)) {
-        if (lamp_state == LAMP_STATE_ON || lamp_state == LAMP_STATE_DIMMING) {
-            lamp_state = LAMP_STATE_DIMMING;
-            inactivity_timer_ms = 0;
-            show_brightness_until_ms = now + 1500;
+    /* 2. Update State Machine */
+    update_state_machine(now);
 
-            if (dim_direction > 0) {
-                if (current_brightness < MAX_BRIGHTNESS_PERCENT) {
-                    current_brightness++;
-                }
-            } else {
-                if (current_brightness > MIN_BRIGHTNESS_PERCENT) {
-                    current_brightness--;
-                }
-            }
-            saved_brightness = current_brightness;
-            pwm_duty = gyver_gamma2(current_brightness);
-        }
-    }
-
-    /* D. Release after Hold/Step Dimming */
-    if (ubutton_release_step(&touch_btn)) {
-        /* Invert ramp direction for next long press */
-        dim_direction = -dim_direction;
-        if (lamp_state == LAMP_STATE_DIMMING) {
-            lamp_state = LAMP_STATE_ON;
-            inactivity_timer_ms = 0;
-        }
-    }
-
-    /* 2. Sample Battery Voltage every 500 ms */
+    /* 3. Sample Battery Voltage every 500 ms */
     if (now - last_bat_sample_ms >= 500) {
         last_bat_sample_ms = now;
         update_battery_measure();
     }
 
-    /* 3. Update FH8016 Display every 50 ms (20 Hz) */
-    if (now - last_disp_update_ms >= 50) {
+    /* 4. Update FH8016 Display Hardware at ~30 Hz (every 33 ms) */
+    if (now - last_disp_update_ms >= 33) {
         last_disp_update_ms = now;
-        update_display(now);
+        update_display_hardware(now);
     }
 
-    /* 4. Sleep check: If lamp is completely OFF and not on USB charger, enter STOP mode */
-    if (lamp_state == LAMP_STATE_OFF && !vbus_present && !ubutton_is_pressed(&touch_btn)) {
+    /* 5. Sleep check: If lamp is in SLEEP and not pressed and not on USB-C charger */
+    if (lamp_state == LAMP_STATE_SLEEP && !btn_pressed && !vbus_present) {
         enter_deep_sleep();
     }
 }
