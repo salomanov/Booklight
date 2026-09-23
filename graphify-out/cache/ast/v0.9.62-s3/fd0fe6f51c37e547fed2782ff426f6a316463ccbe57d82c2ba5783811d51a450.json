@@ -1,0 +1,1 @@
+{"nodes": [{"id": "$graphify-root$_custom_firmware_py32f002b_it_h", "label": "py32f002b_it.h", "file_type": "code", "source_file": "custom_firmware/py32f002b_it.h", "source_location": "L1"}], "edges": [], "raw_calls": [], "parse_errors": {"first_error_line": 42, "multiline_error": false}}
