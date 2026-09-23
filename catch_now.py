@@ -51,37 +51,50 @@ def main():
                 j.coresight_write(1, 0x50000000, ap=False)
                 j.coresight_write(0, 0x1E, ap=False) # Clear abort
                 
-                ctrl = j.coresight_read(1, ap=False)
-                cdbgpwrupack = (ctrl >> 29) & 1
+                # Direct halt attempt via AP 0 (fails with exception if target sleeping)
+                j.coresight_write(2, 0x00000000, ap=False) # AP 0 Bank 0
+                j.coresight_write(0, 0x23000002, ap=True)  # CSW: 32-bit transfer
+                j.coresight_write(1, 0xE000EDF0, ap=True)  # TAR: DHCSR
+                j.coresight_write(3, 0xA05F0003, ap=True)  # DRW: C_DEBUGEN | C_HALT
                 
-                if cdbgpwrupack:
-                    # Debug power is UP! Core is awake or waking up!
-                    # AP 0 Bank 0
-                    j.coresight_write(2, 0x00000000, ap=False)
-                    # CSW: 32-bit transfer
-                    j.coresight_write(0, 0x23000002, ap=True)
-                    # TAR: DHCSR (0xE000EDF0)
-                    j.coresight_write(1, 0xE000EDF0, ap=True)
-                    # DRW: C_DEBUGEN | C_HALT (0xA05F0003)
-                    j.coresight_write(3, 0xA05F0003, ap=True)
+                # Read back DHCSR
+                j.coresight_write(1, 0xE000EDF0, ap=True)
+                dhcsr = j.coresight_read(3, ap=True)
+                
+                if (dhcsr & 0x00030000) != 0: # S_HALT or S_REGRDY set!
+                    log(f"\n[{time.strftime('%H:%M:%S')}] ⚡ ЕСТЬ ЗАХВАТ ЯДРА! DPIDR = 0x{dpidr:08X}, DHCSR = 0x{dhcsr:08X} (попытка #{attempts})")
                     
-                    # Read back DHCSR
-                    j.coresight_write(1, 0xE000EDF0, ap=True)
-                    dhcsr = j.coresight_read(3, ap=True)
-                    
-                    if dhcsr & 0x00030000: # S_HALT bit is set!
-                        log(f"\n[{time.strftime('%H:%M:%S')}] ⚡ ЕСТЬ ЗАХВАТ ЯДРА! DPIDR = 0x{dpidr:08X}, DHCSR = 0x{dhcsr:08X} (попытка #{attempts})")
-                        caught = True
-                        break
+                    # Мгновенный аппаратный Mass Erase через регистры Puya Flash Controller
+                    log("[*] Мгновенное аппаратное стирание Flash (Mass Erase)...")
+                    try:
+                        # KEYR = 0x45670123, 0xCDEF89AB
+                        j.coresight_write(1, 0x40022004, ap=True)
+                        j.coresight_write(3, 0x45670123, ap=True)
+                        j.coresight_write(1, 0x40022004, ap=True)
+                        j.coresight_write(3, 0xCDEF89AB, ap=True)
+                        # CR = MER (Mass Erase, bit 2)
+                        j.coresight_write(1, 0x40022010, ap=True)
+                        j.coresight_write(3, 0x00000004, ap=True)
+                        # Start Erase
+                        j.coresight_write(1, 0x08000000, ap=True)
+                        j.coresight_write(3, 0x12344321, ap=True)
+                        time.sleep(0.08)
+                        log("[✓] Flash чипа полностью стерта! Чип больше НИКОГДА не уснет!")
+                    except Exception as ex_er:
+                        log(f"[!] Предупреждение стирания: {ex_er}")
+
+                    caught = True
+                    break
         except Exception:
             pass
 
-        time.sleep(0.005)
+        time.sleep(0.002)
         now = time.time()
-        if now - last_tick >= 3.0:
+        if now - last_tick >= 2.0:
             last_tick = now
             left = int(timeout - (now - start_time))
-            log(f"[...] Слушаю шину SWD ({attempts} опросов)... осталось {left} сек")
+            rate = int(attempts / (now - start_time)) if (now - start_time) > 0 else 0
+            log(f"[...] Слушаю шину SWD ({rate} попыток/сек)... осталось {left} сек")
 
     try:
         j.close()
