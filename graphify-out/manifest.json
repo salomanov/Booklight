@@ -1,0 +1,1430 @@
+{
+  "booklight_studio.py": {
+    "mtime": 1790070290.1650167,
+    "seen": 1790168624.8695009,
+    "ast_hash": "b442044a6e48c0e82ad6572812f5883c",
+    "semantic_hash": "b442044a6e48c0e82ad6572812f5883c"
+  },
+  "build.py": {
+    "mtime": 1790110282.001291,
+    "seen": 1790168624.8695085,
+    "ast_hash": "357cfc17a1d3826dba40a49372dd889f",
+    "semantic_hash": "357cfc17a1d3826dba40a49372dd889f"
+  },
+  "build_pyi/BookLight_Studio/Analysis-00.toc": {
+    "mtime": 1789861536.2702484,
+    "seen": 1790168624.8695116,
+    "ast_hash": "7598981cf658129dbb22a9d4854f8c89",
+    "semantic_hash": "7598981cf658129dbb22a9d4854f8c89"
+  },
+  "build_pyi/BookLight_Studio/COLLECT-00.toc": {
+    "mtime": 1789861539.4308484,
+    "seen": 1790168624.8695138,
+    "ast_hash": "13d2576ad7adb538fe5aa21c5c982676",
+    "semantic_hash": "13d2576ad7adb538fe5aa21c5c982676"
+  },
+  "build_pyi/BookLight_Studio/EXE-00.toc": {
+    "mtime": 1789861536.889853,
+    "seen": 1790168624.8695161,
+    "ast_hash": "40d0634f4732fef9093a2be3f374da30",
+    "semantic_hash": "40d0634f4732fef9093a2be3f374da30"
+  },
+  "build_pyi/BookLight_Studio/PKG-00.toc": {
+    "mtime": 1789861536.6872227,
+    "seen": 1790168624.8695178,
+    "ast_hash": "3ea893c4b6899e0e6c04e39fa051c323",
+    "semantic_hash": "3ea893c4b6899e0e6c04e39fa051c323"
+  },
+  "build_pyi/BookLight_Studio/PYZ-00.toc": {
+    "mtime": 1789861536.59508,
+    "seen": 1790168624.8695204,
+    "ast_hash": "1b2b56204b36dd5184650eba788e538b",
+    "semantic_hash": "1b2b56204b36dd5184650eba788e538b"
+  },
+  "catch_and_flash.py": {
+    "mtime": 1790142318.9472737,
+    "seen": 1790168624.8695219,
+    "ast_hash": "0146ff7cf1e67cdd9e9f9ba9cab57643",
+    "semantic_hash": "0146ff7cf1e67cdd9e9f9ba9cab57643"
+  },
+  "catch_now.py": {
+    "mtime": 1790143163.6210933,
+    "seen": 1790168624.8695238,
+    "ast_hash": "23f4063627550e2e53ed63690eb8a14c",
+    "semantic_hash": "23f4063627550e2e53ed63690eb8a14c"
+  },
+  "custom_firmware/WORKING_BEFORE_SCENARIO/book_light.c": {
+    "mtime": 1790110369.2852993,
+    "seen": 1790168624.8695254,
+    "ast_hash": "63bcbd06a42dad414ddacdfbeff726d3",
+    "semantic_hash": "63bcbd06a42dad414ddacdfbeff726d3"
+  },
+  "custom_firmware/WORKING_BEFORE_SCENARIO/book_light.h": {
+    "mtime": 1790110369.3794308,
+    "seen": 1790168624.8695276,
+    "ast_hash": "ea5d7031e8bc6afcb722a7986398b58d",
+    "semantic_hash": "ea5d7031e8bc6afcb722a7986398b58d"
+  },
+  "custom_firmware/WORKING_BEFORE_SCENARIO/charlie.c": {
+    "mtime": 1790110369.4301794,
+    "seen": 1790168624.8695302,
+    "ast_hash": "c742ff81b060063f6d010f79fda39e91",
+    "semantic_hash": "c742ff81b060063f6d010f79fda39e91"
+  },
+  "custom_firmware/WORKING_BEFORE_SCENARIO/charlie.h": {
+    "mtime": 1790110369.470131,
+    "seen": 1790168624.869532,
+    "ast_hash": "151d190de8008fbc8e09b842fa84e732",
+    "semantic_hash": "151d190de8008fbc8e09b842fa84e732"
+  },
+  "custom_firmware/WORKING_BEFORE_SCENARIO/digit.c": {
+    "mtime": 1790110369.5083253,
+    "seen": 1790168624.8695338,
+    "ast_hash": "4570846c1e39dfa2e62e2148575707c7",
+    "semantic_hash": "4570846c1e39dfa2e62e2148575707c7"
+  },
+  "custom_firmware/WORKING_BEFORE_SCENARIO/digit.h": {
+    "mtime": 1790110369.6017115,
+    "seen": 1790168624.8696878,
+    "ast_hash": "58e1b8621f6894d80730f64c3d279c42",
+    "semantic_hash": "58e1b8621f6894d80730f64c3d279c42"
+  },
+  "custom_firmware/WORKING_BEFORE_SCENARIO/fh8016_py32.c": {
+    "mtime": 1790110369.6556265,
+    "seen": 1790168624.8696916,
+    "ast_hash": "3c025c70af0a5670dfc756223c31fd1d",
+    "semantic_hash": "3c025c70af0a5670dfc756223c31fd1d"
+  },
+  "custom_firmware/WORKING_BEFORE_SCENARIO/fh8016_py32.h": {
+    "mtime": 1790110369.69418,
+    "seen": 1790168624.8696938,
+    "ast_hash": "62820d93a0ecf77e872fcb5a7e94edd0",
+    "semantic_hash": "62820d93a0ecf77e872fcb5a7e94edd0"
+  },
+  "custom_firmware/WORKING_BEFORE_SCENARIO/gyver_rgbmath.c": {
+    "mtime": 1790110369.7342465,
+    "seen": 1790168624.8696954,
+    "ast_hash": "1544dd1869d62b7302fe03dc5131b807",
+    "semantic_hash": "1544dd1869d62b7302fe03dc5131b807"
+  },
+  "custom_firmware/WORKING_BEFORE_SCENARIO/gyver_rgbmath.h": {
+    "mtime": 1790110369.7735,
+    "seen": 1790168624.8696976,
+    "ast_hash": "b4f62b1f639aca11b52e0d27071ee045",
+    "semantic_hash": "b4f62b1f639aca11b52e0d27071ee045"
+  },
+  "custom_firmware/WORKING_BEFORE_SCENARIO/gyver_ubutton.c": {
+    "mtime": 1790110369.8153632,
+    "seen": 1790168624.8696992,
+    "ast_hash": "4864bf9e3dbf77e398b859850d292a5d",
+    "semantic_hash": "4864bf9e3dbf77e398b859850d292a5d"
+  },
+  "custom_firmware/WORKING_BEFORE_SCENARIO/gyver_ubutton.h": {
+    "mtime": 1790110369.8943758,
+    "seen": 1790168624.8697014,
+    "ast_hash": "f958e39b178d7c76a4aa5698e5fe2712",
+    "semantic_hash": "f958e39b178d7c76a4aa5698e5fe2712"
+  },
+  "custom_firmware/WORKING_BEFORE_SCENARIO/main.c": {
+    "mtime": 1790110370.3141096,
+    "seen": 1790168624.8697028,
+    "ast_hash": "807622e9e778f3535fa8403a394a2ad2",
+    "semantic_hash": "807622e9e778f3535fa8403a394a2ad2"
+  },
+  "custom_firmware/WORKING_BEFORE_SCENARIO/py32f002b_hal_conf.h": {
+    "mtime": 1790110370.0127614,
+    "seen": 1790168624.8697062,
+    "ast_hash": "3fd423d221c3f46615d1f13bb29a8647",
+    "semantic_hash": "3fd423d221c3f46615d1f13bb29a8647"
+  },
+  "custom_firmware/WORKING_BEFORE_SCENARIO/py32f002b_hal_msp.c": {
+    "mtime": 1790110370.0505786,
+    "seen": 1790168624.869708,
+    "ast_hash": "96e1e35a341ce7b867966be084a9d79a",
+    "semantic_hash": "96e1e35a341ce7b867966be084a9d79a"
+  },
+  "custom_firmware/WORKING_BEFORE_SCENARIO/py32f002b_it.c": {
+    "mtime": 1790110370.1526806,
+    "seen": 1790168624.8697097,
+    "ast_hash": "fd12cc26e902ecf10c5d94a6c8d1a342",
+    "semantic_hash": "fd12cc26e902ecf10c5d94a6c8d1a342"
+  },
+  "custom_firmware/WORKING_BEFORE_SCENARIO/py32f002b_it.h": {
+    "mtime": 1790110370.2217283,
+    "seen": 1790168624.8697114,
+    "ast_hash": "73241c67a6dc2ddae5a80d87d799bc5b",
+    "semantic_hash": "73241c67a6dc2ddae5a80d87d799bc5b"
+  },
+  "custom_firmware/book_light.c": {
+    "mtime": 1790110456.3278766,
+    "seen": 1790168624.8697133,
+    "ast_hash": "6f1a643b7428e6c2915eb2f5c29ec0a4",
+    "semantic_hash": "6f1a643b7428e6c2915eb2f5c29ec0a4"
+  },
+  "custom_firmware/book_light.h": {
+    "mtime": 1790110456.3293543,
+    "seen": 1790168624.8697724,
+    "ast_hash": "acdf475e64cd7a594291074e27f7ab18",
+    "semantic_hash": "acdf475e64cd7a594291074e27f7ab18"
+  },
+  "custom_firmware/charlie.c": {
+    "mtime": 1790110282.0037937,
+    "seen": 1790168624.8697774,
+    "ast_hash": "2eba32a171b2467978c760d1da5ead0e",
+    "semantic_hash": "2eba32a171b2467978c760d1da5ead0e"
+  },
+  "custom_firmware/charlie.h": {
+    "mtime": 1790110282.0037937,
+    "seen": 1790168624.8697793,
+    "ast_hash": "042dd8717bd98776a2ffb466ceaecd3b",
+    "semantic_hash": "042dd8717bd98776a2ffb466ceaecd3b"
+  },
+  "custom_firmware/digit.c": {
+    "mtime": 1790110282.0047932,
+    "seen": 1790168624.8697815,
+    "ast_hash": "2d10d42769cfc5fe8aedc6b9de92eba0",
+    "semantic_hash": "2d10d42769cfc5fe8aedc6b9de92eba0"
+  },
+  "custom_firmware/digit.h": {
+    "mtime": 1790110282.0047932,
+    "seen": 1790168624.869783,
+    "ast_hash": "deb58e37d3c0e3f79b268507f199a076",
+    "semantic_hash": "deb58e37d3c0e3f79b268507f199a076"
+  },
+  "custom_firmware/fh8016_py32.c": {
+    "mtime": 1790110456.33035,
+    "seen": 1790168624.869785,
+    "ast_hash": "717baa5178de4d91500faaaa3ff4acb2",
+    "semantic_hash": "717baa5178de4d91500faaaa3ff4acb2"
+  },
+  "custom_firmware/fh8016_py32.h": {
+    "mtime": 1790110282.0073051,
+    "seen": 1790168624.869787,
+    "ast_hash": "e6cbd180740800b46e81eede413e23f3",
+    "semantic_hash": "e6cbd180740800b46e81eede413e23f3"
+  },
+  "custom_firmware/gyver_led.c": {
+    "mtime": 1790070322.8600914,
+    "seen": 1790168624.8697886,
+    "ast_hash": "8cc1a9cd4d3222b54566db766e5b1342",
+    "semantic_hash": "8cc1a9cd4d3222b54566db766e5b1342"
+  },
+  "custom_firmware/gyver_led.h": {
+    "mtime": 1789912054.675714,
+    "seen": 1790168624.8697903,
+    "ast_hash": "26106a3dadeb56cf515411cc8d2e2aef",
+    "semantic_hash": "26106a3dadeb56cf515411cc8d2e2aef"
+  },
+  "custom_firmware/gyver_rgbmath.c": {
+    "mtime": 1789453242.2999327,
+    "seen": 1790168624.869792,
+    "ast_hash": "9a1ea99b76229d24cd7c8cff411e3aaf",
+    "semantic_hash": "9a1ea99b76229d24cd7c8cff411e3aaf"
+  },
+  "custom_firmware/gyver_rgbmath.h": {
+    "mtime": 1789453238.6142366,
+    "seen": 1790168624.8697944,
+    "ast_hash": "0fec663f2e4560f11bd1ef0d060b3a7e",
+    "semantic_hash": "0fec663f2e4560f11bd1ef0d060b3a7e"
+  },
+  "custom_firmware/gyver_timer.h": {
+    "mtime": 1789910624.477416,
+    "seen": 1790168624.869796,
+    "ast_hash": "be0b2037ffe56fe5c0373baabfb3e08d",
+    "semantic_hash": "be0b2037ffe56fe5c0373baabfb3e08d"
+  },
+  "custom_firmware/gyver_ubutton.c": {
+    "mtime": 1790110282.0073051,
+    "seen": 1790168624.869798,
+    "ast_hash": "586c89504332bcfd12dcc725b6c942c5",
+    "semantic_hash": "586c89504332bcfd12dcc725b6c942c5"
+  },
+  "custom_firmware/gyver_ubutton.h": {
+    "mtime": 1790110282.0082977,
+    "seen": 1790168624.8697996,
+    "ast_hash": "254a81541697789e206f691c99469ed8",
+    "semantic_hash": "254a81541697789e206f691c99469ed8"
+  },
+  "custom_firmware/main.c": {
+    "mtime": 1790142343.1718564,
+    "seen": 1790168624.8698013,
+    "ast_hash": "f1c569f9ce28f2dc8869c5106487f5d2",
+    "semantic_hash": "f1c569f9ce28f2dc8869c5106487f5d2"
+  },
+  "custom_firmware/main_scenario_backup.c": {
+    "mtime": 1790110282.0082977,
+    "seen": 1790168624.869803,
+    "ast_hash": "4b4508ade0a49ddbb4bd73b0d9782e21",
+    "semantic_hash": "4b4508ade0a49ddbb4bd73b0d9782e21"
+  },
+  "custom_firmware/py32_board.c": {
+    "mtime": 1790070364.9774535,
+    "seen": 1790168624.8698065,
+    "ast_hash": "012c221c24dd54c806f755c4e77ae81a",
+    "semantic_hash": "012c221c24dd54c806f755c4e77ae81a"
+  },
+  "custom_firmware/py32_board.h": {
+    "mtime": 1789914023.0368698,
+    "seen": 1790168624.8698084,
+    "ast_hash": "2c9b9e96ea46ccef832d0e71b6f60acc",
+    "semantic_hash": "2c9b9e96ea46ccef832d0e71b6f60acc"
+  },
+  "custom_firmware/py32f002b_hal_conf.h": {
+    "mtime": 1790110282.0092976,
+    "seen": 1790168624.86981,
+    "ast_hash": "c6f7cf6352b7b86e1c53d202008a143c",
+    "semantic_hash": "c6f7cf6352b7b86e1c53d202008a143c"
+  },
+  "custom_firmware/py32f002b_hal_msp.c": {
+    "mtime": 1790110282.0092976,
+    "seen": 1790168624.869812,
+    "ast_hash": "29de485449c2d9fc7ecbc8dcafb7f925",
+    "semantic_hash": "29de485449c2d9fc7ecbc8dcafb7f925"
+  },
+  "custom_firmware/py32f002b_it.c": {
+    "mtime": 1790110282.0102968,
+    "seen": 1790168624.8698134,
+    "ast_hash": "19dd52b49854b3f8a7a0a06f00baa18c",
+    "semantic_hash": "19dd52b49854b3f8a7a0a06f00baa18c"
+  },
+  "custom_firmware/py32f002b_it.h": {
+    "mtime": 1790110282.0108047,
+    "seen": 1790168624.8698153,
+    "ast_hash": "817796ca56b38cae03f787633d41af10",
+    "semantic_hash": "817796ca56b38cae03f787633d41af10"
+  },
+  "d1_test/src/fh8016.cpp": {
+    "mtime": 1789530713.45778,
+    "seen": 1790168624.8698173,
+    "ast_hash": "1ad6536311f5259776b9db2525907e85",
+    "semantic_hash": "1ad6536311f5259776b9db2525907e85"
+  },
+  "d1_test/src/fh8016.h": {
+    "mtime": 1789464218.2224112,
+    "seen": 1790168624.8698418,
+    "ast_hash": "4185d02ec036adf6f3d5301b380b8829",
+    "semantic_hash": "4185d02ec036adf6f3d5301b380b8829"
+  },
+  "d1_test/src/main.cpp": {
+    "mtime": 1789542687.6141696,
+    "seen": 1790168624.869846,
+    "ast_hash": "9a3106002fdbe4f0bf08116b22a527e1",
+    "semantic_hash": "9a3106002fdbe4f0bf08116b22a527e1"
+  },
+  "flash_direct.py": {
+    "mtime": 1789914553.3629777,
+    "seen": 1790168624.869848,
+    "ast_hash": "da16783141c78dbe7d2f41430c491142",
+    "semantic_hash": "da16783141c78dbe7d2f41430c491142"
+  },
+  "lamp_controller.py": {
+    "mtime": 1789916912.8224776,
+    "seen": 1790168624.86985,
+    "ast_hash": "e001dc632e5c21bfc2e27b10bf1a10a5",
+    "semantic_hash": "e001dc632e5c21bfc2e27b10bf1a10a5"
+  },
+  "py32c642_vape/Examples/Blink/main.c": {
+    "mtime": 1789322634.4989696,
+    "seen": 1790168624.8698516,
+    "ast_hash": "6561378f457cf8d68277385156420327",
+    "semantic_hash": "6561378f457cf8d68277385156420327"
+  },
+  "py32c642_vape/Examples/Blink/py32f002b_hal_conf.h": {
+    "mtime": 1789322634.5003057,
+    "seen": 1790168624.8698535,
+    "ast_hash": "e1835f4dd570502d21c6f913d38a4177",
+    "semantic_hash": "e1835f4dd570502d21c6f913d38a4177"
+  },
+  "py32c642_vape/Examples/Blink/py32f002b_hal_msp.c": {
+    "mtime": 1789322634.5003057,
+    "seen": 1790168624.869855,
+    "ast_hash": "29de485449c2d9fc7ecbc8dcafb7f925",
+    "semantic_hash": "29de485449c2d9fc7ecbc8dcafb7f925"
+  },
+  "py32c642_vape/Examples/Blink/py32f002b_it.c": {
+    "mtime": 1789322634.5013094,
+    "seen": 1790168624.869857,
+    "ast_hash": "7e1a96994410b6dc5e7350b8bb834ccc",
+    "semantic_hash": "7e1a96994410b6dc5e7350b8bb834ccc"
+  },
+  "py32c642_vape/Examples/Blink/py32f002b_it.h": {
+    "mtime": 1789322634.5022964,
+    "seen": 1790168624.8698587,
+    "ast_hash": "817796ca56b38cae03f787633d41af10",
+    "semantic_hash": "817796ca56b38cae03f787633d41af10"
+  },
+  "py32c642_vape/Examples/bat_measure/charlie.c": {
+    "mtime": 1789322634.5052946,
+    "seen": 1790168624.8698606,
+    "ast_hash": "2eba32a171b2467978c760d1da5ead0e",
+    "semantic_hash": "2eba32a171b2467978c760d1da5ead0e"
+  },
+  "py32c642_vape/Examples/bat_measure/charlie.h": {
+    "mtime": 1789322634.5052946,
+    "seen": 1790168624.8698623,
+    "ast_hash": "042dd8717bd98776a2ffb466ceaecd3b",
+    "semantic_hash": "042dd8717bd98776a2ffb466ceaecd3b"
+  },
+  "py32c642_vape/Examples/bat_measure/digit.c": {
+    "mtime": 1789322634.5062935,
+    "seen": 1790168624.869864,
+    "ast_hash": "2d10d42769cfc5fe8aedc6b9de92eba0",
+    "semantic_hash": "2d10d42769cfc5fe8aedc6b9de92eba0"
+  },
+  "py32c642_vape/Examples/bat_measure/digit.h": {
+    "mtime": 1789322634.5068083,
+    "seen": 1790168624.8698657,
+    "ast_hash": "deb58e37d3c0e3f79b268507f199a076",
+    "semantic_hash": "deb58e37d3c0e3f79b268507f199a076"
+  },
+  "py32c642_vape/Examples/bat_measure/main.c": {
+    "mtime": 1789322634.5068083,
+    "seen": 1790168624.8698676,
+    "ast_hash": "a6d8ce38be6221373cf37c5b3f25faa2",
+    "semantic_hash": "a6d8ce38be6221373cf37c5b3f25faa2"
+  },
+  "py32c642_vape/Examples/bat_measure/py32f002b_hal_conf.h": {
+    "mtime": 1789322634.5078006,
+    "seen": 1790168624.8698692,
+    "ast_hash": "c6f7cf6352b7b86e1c53d202008a143c",
+    "semantic_hash": "c6f7cf6352b7b86e1c53d202008a143c"
+  },
+  "py32c642_vape/Examples/bat_measure/py32f002b_hal_msp.c": {
+    "mtime": 1789322634.5078006,
+    "seen": 1790168624.8698711,
+    "ast_hash": "29de485449c2d9fc7ecbc8dcafb7f925",
+    "semantic_hash": "29de485449c2d9fc7ecbc8dcafb7f925"
+  },
+  "py32c642_vape/Examples/bat_measure/py32f002b_it.c": {
+    "mtime": 1789322634.508815,
+    "seen": 1790168624.8698728,
+    "ast_hash": "72aafec3f0349c0f34a5f3bce0dc3e80",
+    "semantic_hash": "72aafec3f0349c0f34a5f3bce0dc3e80"
+  },
+  "py32c642_vape/Examples/bat_measure/py32f002b_it.h": {
+    "mtime": 1789322634.508815,
+    "seen": 1790168624.8698747,
+    "ast_hash": "817796ca56b38cae03f787633d41af10",
+    "semantic_hash": "817796ca56b38cae03f787633d41af10"
+  },
+  "py32c642_vape/Examples/digit_counter/charlie.c": {
+    "mtime": 1789322634.5098138,
+    "seen": 1790168624.8698761,
+    "ast_hash": "2eba32a171b2467978c760d1da5ead0e",
+    "semantic_hash": "2eba32a171b2467978c760d1da5ead0e"
+  },
+  "py32c642_vape/Examples/digit_counter/charlie.h": {
+    "mtime": 1789322634.5098138,
+    "seen": 1790168624.869878,
+    "ast_hash": "042dd8717bd98776a2ffb466ceaecd3b",
+    "semantic_hash": "042dd8717bd98776a2ffb466ceaecd3b"
+  },
+  "py32c642_vape/Examples/digit_counter/digit.c": {
+    "mtime": 1789322634.510799,
+    "seen": 1790168624.8698795,
+    "ast_hash": "2d10d42769cfc5fe8aedc6b9de92eba0",
+    "semantic_hash": "2d10d42769cfc5fe8aedc6b9de92eba0"
+  },
+  "py32c642_vape/Examples/digit_counter/digit.h": {
+    "mtime": 1789322634.510799,
+    "seen": 1790168624.8698812,
+    "ast_hash": "deb58e37d3c0e3f79b268507f199a076",
+    "semantic_hash": "deb58e37d3c0e3f79b268507f199a076"
+  },
+  "py32c642_vape/Examples/digit_counter/main.c": {
+    "mtime": 1789322634.5117972,
+    "seen": 1790168624.8698828,
+    "ast_hash": "cd1c5d55788122dc211614be3fb7bb8c",
+    "semantic_hash": "cd1c5d55788122dc211614be3fb7bb8c"
+  },
+  "py32c642_vape/Examples/digit_counter/py32f002b_hal_conf.h": {
+    "mtime": 1789322634.5117972,
+    "seen": 1790168624.8698845,
+    "ast_hash": "e1835f4dd570502d21c6f913d38a4177",
+    "semantic_hash": "e1835f4dd570502d21c6f913d38a4177"
+  },
+  "py32c642_vape/Examples/digit_counter/py32f002b_hal_msp.c": {
+    "mtime": 1789322634.5117972,
+    "seen": 1790168624.8698862,
+    "ast_hash": "29de485449c2d9fc7ecbc8dcafb7f925",
+    "semantic_hash": "29de485449c2d9fc7ecbc8dcafb7f925"
+  },
+  "py32c642_vape/Examples/digit_counter/py32f002b_it.c": {
+    "mtime": 1789322634.5117972,
+    "seen": 1790168624.869888,
+    "ast_hash": "72aafec3f0349c0f34a5f3bce0dc3e80",
+    "semantic_hash": "72aafec3f0349c0f34a5f3bce0dc3e80"
+  },
+  "py32c642_vape/Examples/digit_counter/py32f002b_it.h": {
+    "mtime": 1789322634.5127966,
+    "seen": 1790168624.8698897,
+    "ast_hash": "817796ca56b38cae03f787633d41af10",
+    "semantic_hash": "817796ca56b38cae03f787633d41af10"
+  },
+  "py32c642_vape/Examples/fet_measure/charlie.c": {
+    "mtime": 1789322634.513797,
+    "seen": 1790168624.8698912,
+    "ast_hash": "2eba32a171b2467978c760d1da5ead0e",
+    "semantic_hash": "2eba32a171b2467978c760d1da5ead0e"
+  },
+  "py32c642_vape/Examples/fet_measure/charlie.h": {
+    "mtime": 1789322634.514797,
+    "seen": 1790168624.869893,
+    "ast_hash": "042dd8717bd98776a2ffb466ceaecd3b",
+    "semantic_hash": "042dd8717bd98776a2ffb466ceaecd3b"
+  },
+  "py32c642_vape/Examples/fet_measure/digit.c": {
+    "mtime": 1789322634.514797,
+    "seen": 1790168624.869895,
+    "ast_hash": "2d10d42769cfc5fe8aedc6b9de92eba0",
+    "semantic_hash": "2d10d42769cfc5fe8aedc6b9de92eba0"
+  },
+  "py32c642_vape/Examples/fet_measure/digit.h": {
+    "mtime": 1789322634.5154245,
+    "seen": 1790168624.8698967,
+    "ast_hash": "deb58e37d3c0e3f79b268507f199a076",
+    "semantic_hash": "deb58e37d3c0e3f79b268507f199a076"
+  },
+  "py32c642_vape/Examples/fet_measure/main.c": {
+    "mtime": 1789322634.5159335,
+    "seen": 1790168624.8698986,
+    "ast_hash": "41664a323deca292900958953f378c51",
+    "semantic_hash": "41664a323deca292900958953f378c51"
+  },
+  "py32c642_vape/Examples/fet_measure/py32f002b_hal_conf.h": {
+    "mtime": 1789322634.519945,
+    "seen": 1790168624.8699224,
+    "ast_hash": "c6f7cf6352b7b86e1c53d202008a143c",
+    "semantic_hash": "c6f7cf6352b7b86e1c53d202008a143c"
+  },
+  "py32c642_vape/Examples/fet_measure/py32f002b_hal_msp.c": {
+    "mtime": 1789322634.5204577,
+    "seen": 1790168624.869925,
+    "ast_hash": "29de485449c2d9fc7ecbc8dcafb7f925",
+    "semantic_hash": "29de485449c2d9fc7ecbc8dcafb7f925"
+  },
+  "py32c642_vape/Examples/fet_measure/py32f002b_it.c": {
+    "mtime": 1789322634.5204577,
+    "seen": 1790168624.8699272,
+    "ast_hash": "72aafec3f0349c0f34a5f3bce0dc3e80",
+    "semantic_hash": "72aafec3f0349c0f34a5f3bce0dc3e80"
+  },
+  "py32c642_vape/Examples/fet_measure/py32f002b_it.h": {
+    "mtime": 1789322634.5204577,
+    "seen": 1790168624.869929,
+    "ast_hash": "817796ca56b38cae03f787633d41af10",
+    "semantic_hash": "817796ca56b38cae03f787633d41af10"
+  },
+  "py32c642_vape/Examples/fet_pwm/charlie.c": {
+    "mtime": 1789322634.5224512,
+    "seen": 1790168624.8699334,
+    "ast_hash": "2eba32a171b2467978c760d1da5ead0e",
+    "semantic_hash": "2eba32a171b2467978c760d1da5ead0e"
+  },
+  "py32c642_vape/Examples/fet_pwm/charlie.h": {
+    "mtime": 1789322634.5224512,
+    "seen": 1790168624.8699348,
+    "ast_hash": "042dd8717bd98776a2ffb466ceaecd3b",
+    "semantic_hash": "042dd8717bd98776a2ffb466ceaecd3b"
+  },
+  "py32c642_vape/Examples/fet_pwm/digit.c": {
+    "mtime": 1789322634.5224512,
+    "seen": 1790168624.8699367,
+    "ast_hash": "2d10d42769cfc5fe8aedc6b9de92eba0",
+    "semantic_hash": "2d10d42769cfc5fe8aedc6b9de92eba0"
+  },
+  "py32c642_vape/Examples/fet_pwm/digit.h": {
+    "mtime": 1789322634.52345,
+    "seen": 1790168624.8699381,
+    "ast_hash": "deb58e37d3c0e3f79b268507f199a076",
+    "semantic_hash": "deb58e37d3c0e3f79b268507f199a076"
+  },
+  "py32c642_vape/Examples/fet_pwm/main.c": {
+    "mtime": 1789322634.52345,
+    "seen": 1790168624.86994,
+    "ast_hash": "8bce7b7b04db35927819bfa1bae1ad8b",
+    "semantic_hash": "8bce7b7b04db35927819bfa1bae1ad8b"
+  },
+  "py32c642_vape/Examples/fet_pwm/py32f002b_hal_conf.h": {
+    "mtime": 1789322634.5254588,
+    "seen": 1790168624.8699417,
+    "ast_hash": "dbd9f380fd86354f67091cb6e519b776",
+    "semantic_hash": "dbd9f380fd86354f67091cb6e519b776"
+  },
+  "py32c642_vape/Examples/fet_pwm/py32f002b_hal_msp.c": {
+    "mtime": 1789322634.5254588,
+    "seen": 1790168624.8699434,
+    "ast_hash": "29de485449c2d9fc7ecbc8dcafb7f925",
+    "semantic_hash": "29de485449c2d9fc7ecbc8dcafb7f925"
+  },
+  "py32c642_vape/Examples/fet_pwm/py32f002b_it.c": {
+    "mtime": 1789322634.5254588,
+    "seen": 1790168624.8699453,
+    "ast_hash": "72aafec3f0349c0f34a5f3bce0dc3e80",
+    "semantic_hash": "72aafec3f0349c0f34a5f3bce0dc3e80"
+  },
+  "py32c642_vape/Examples/fet_pwm/py32f002b_it.h": {
+    "mtime": 1789322634.5264635,
+    "seen": 1790168624.8699474,
+    "ast_hash": "817796ca56b38cae03f787633d41af10",
+    "semantic_hash": "817796ca56b38cae03f787633d41af10"
+  },
+  "py32c642_vape/Examples/led_walk_charlie/charlie.c": {
+    "mtime": 1789322634.5274622,
+    "seen": 1790168624.869949,
+    "ast_hash": "2eba32a171b2467978c760d1da5ead0e",
+    "semantic_hash": "2eba32a171b2467978c760d1da5ead0e"
+  },
+  "py32c642_vape/Examples/led_walk_charlie/charlie.h": {
+    "mtime": 1789322634.5274622,
+    "seen": 1790168624.869951,
+    "ast_hash": "042dd8717bd98776a2ffb466ceaecd3b",
+    "semantic_hash": "042dd8717bd98776a2ffb466ceaecd3b"
+  },
+  "py32c642_vape/Examples/led_walk_charlie/main.c": {
+    "mtime": 1789322634.5325801,
+    "seen": 1790168624.8699524,
+    "ast_hash": "e43387075d6622e5003e9a588e03ed2b",
+    "semantic_hash": "e43387075d6622e5003e9a588e03ed2b"
+  },
+  "py32c642_vape/Examples/led_walk_charlie/py32f002b_hal_conf.h": {
+    "mtime": 1789322634.5325801,
+    "seen": 1790168624.8699543,
+    "ast_hash": "e1835f4dd570502d21c6f913d38a4177",
+    "semantic_hash": "e1835f4dd570502d21c6f913d38a4177"
+  },
+  "py32c642_vape/Examples/led_walk_charlie/py32f002b_hal_msp.c": {
+    "mtime": 1789322634.53358,
+    "seen": 1790168624.869956,
+    "ast_hash": "29de485449c2d9fc7ecbc8dcafb7f925",
+    "semantic_hash": "29de485449c2d9fc7ecbc8dcafb7f925"
+  },
+  "py32c642_vape/Examples/led_walk_charlie/py32f002b_it.c": {
+    "mtime": 1789322634.53358,
+    "seen": 1790168624.8699577,
+    "ast_hash": "72aafec3f0349c0f34a5f3bce0dc3e80",
+    "semantic_hash": "72aafec3f0349c0f34a5f3bce0dc3e80"
+  },
+  "py32c642_vape/Examples/led_walk_charlie/py32f002b_it.h": {
+    "mtime": 1789322634.5345795,
+    "seen": 1790168624.8699594,
+    "ast_hash": "817796ca56b38cae03f787633d41af10",
+    "semantic_hash": "817796ca56b38cae03f787633d41af10"
+  },
+  "py32c642_vape/Examples/lp_clock/charlie.c": {
+    "mtime": 1789322634.535579,
+    "seen": 1790168624.869961,
+    "ast_hash": "ebc277dae1d8346ee27c55121783d5ee",
+    "semantic_hash": "ebc277dae1d8346ee27c55121783d5ee"
+  },
+  "py32c642_vape/Examples/lp_clock/charlie.h": {
+    "mtime": 1789322634.535579,
+    "seen": 1790168624.8699625,
+    "ast_hash": "91e7a5b8b9147b47c27f85c9f189ac09",
+    "semantic_hash": "91e7a5b8b9147b47c27f85c9f189ac09"
+  },
+  "py32c642_vape/Examples/lp_clock/main.c": {
+    "mtime": 1789322634.5365772,
+    "seen": 1790168624.8699644,
+    "ast_hash": "e0192f61f578735dc503bdb3f53da434",
+    "semantic_hash": "e0192f61f578735dc503bdb3f53da434"
+  },
+  "py32c642_vape/Examples/lp_clock/py32f002b_hal_conf.h": {
+    "mtime": 1789322634.5365772,
+    "seen": 1790168624.8699658,
+    "ast_hash": "35c57ec6f59707b3e3f25a9b087e5199",
+    "semantic_hash": "35c57ec6f59707b3e3f25a9b087e5199"
+  },
+  "py32c642_vape/Examples/lp_clock/py32f002b_hal_msp.c": {
+    "mtime": 1789322634.5365772,
+    "seen": 1790168624.8699677,
+    "ast_hash": "29de485449c2d9fc7ecbc8dcafb7f925",
+    "semantic_hash": "29de485449c2d9fc7ecbc8dcafb7f925"
+  },
+  "py32c642_vape/Examples/lp_clock/py32f002b_it.c": {
+    "mtime": 1789322634.5375774,
+    "seen": 1790168624.8699691,
+    "ast_hash": "4e99a5056568643c8bff910e129cd376",
+    "semantic_hash": "4e99a5056568643c8bff910e129cd376"
+  },
+  "py32c642_vape/Examples/lp_clock/py32f002b_it.h": {
+    "mtime": 1789322634.5375774,
+    "seen": 1790168624.8699708,
+    "ast_hash": "817796ca56b38cae03f787633d41af10",
+    "semantic_hash": "817796ca56b38cae03f787633d41af10"
+  },
+  "py32c642_vape/Examples/pressure_sensors/charlie.c": {
+    "mtime": 1789322634.5385766,
+    "seen": 1790168624.8699725,
+    "ast_hash": "2eba32a171b2467978c760d1da5ead0e",
+    "semantic_hash": "2eba32a171b2467978c760d1da5ead0e"
+  },
+  "py32c642_vape/Examples/pressure_sensors/charlie.h": {
+    "mtime": 1789322634.5385766,
+    "seen": 1790168624.8699744,
+    "ast_hash": "042dd8717bd98776a2ffb466ceaecd3b",
+    "semantic_hash": "042dd8717bd98776a2ffb466ceaecd3b"
+  },
+  "py32c642_vape/Examples/pressure_sensors/digit.c": {
+    "mtime": 1789322634.5395758,
+    "seen": 1790168624.869976,
+    "ast_hash": "2d10d42769cfc5fe8aedc6b9de92eba0",
+    "semantic_hash": "2d10d42769cfc5fe8aedc6b9de92eba0"
+  },
+  "py32c642_vape/Examples/pressure_sensors/digit.h": {
+    "mtime": 1789322634.5395758,
+    "seen": 1790168624.8699777,
+    "ast_hash": "deb58e37d3c0e3f79b268507f199a076",
+    "semantic_hash": "deb58e37d3c0e3f79b268507f199a076"
+  },
+  "py32c642_vape/Examples/pressure_sensors/main.c": {
+    "mtime": 1789322634.5395758,
+    "seen": 1790168624.8699791,
+    "ast_hash": "eb6f22aa79ff5033f7d55f2610ccb313",
+    "semantic_hash": "eb6f22aa79ff5033f7d55f2610ccb313"
+  },
+  "py32c642_vape/Examples/pressure_sensors/py32f002b_hal_conf.h": {
+    "mtime": 1789322634.5405753,
+    "seen": 1790168624.8699806,
+    "ast_hash": "c6f7cf6352b7b86e1c53d202008a143c",
+    "semantic_hash": "c6f7cf6352b7b86e1c53d202008a143c"
+  },
+  "py32c642_vape/Examples/pressure_sensors/py32f002b_hal_msp.c": {
+    "mtime": 1789322634.5405753,
+    "seen": 1790168624.8699825,
+    "ast_hash": "29de485449c2d9fc7ecbc8dcafb7f925",
+    "semantic_hash": "29de485449c2d9fc7ecbc8dcafb7f925"
+  },
+  "py32c642_vape/Examples/pressure_sensors/py32f002b_it.c": {
+    "mtime": 1789322634.5405753,
+    "seen": 1790168624.869984,
+    "ast_hash": "72aafec3f0349c0f34a5f3bce0dc3e80",
+    "semantic_hash": "72aafec3f0349c0f34a5f3bce0dc3e80"
+  },
+  "py32c642_vape/Examples/pressure_sensors/py32f002b_it.h": {
+    "mtime": 1789322634.5415747,
+    "seen": 1790168624.8699856,
+    "ast_hash": "817796ca56b38cae03f787633d41af10",
+    "semantic_hash": "817796ca56b38cae03f787633d41af10"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/cachel1_armv7.h": {
+    "mtime": 1789322634.542574,
+    "seen": 1790168624.8699875,
+    "ast_hash": "eae619b69edbe5e6cdaa6806fef14785",
+    "semantic_hash": "eae619b69edbe5e6cdaa6806fef14785"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/cmsis_armcc.h": {
+    "mtime": 1789322634.5435736,
+    "seen": 1790168624.8699892,
+    "ast_hash": "8d42826654558284d24f5cac11040962",
+    "semantic_hash": "8d42826654558284d24f5cac11040962"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/cmsis_armclang.h": {
+    "mtime": 1789322634.5455725,
+    "seen": 1790168624.8699908,
+    "ast_hash": "511882e5e9374cf4fab123d2d3269c74",
+    "semantic_hash": "511882e5e9374cf4fab123d2d3269c74"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/cmsis_armclang_ltm.h": {
+    "mtime": 1789322634.54708,
+    "seen": 1790168624.8699927,
+    "ast_hash": "57f54d9f63d0b2c7afbef8522be500be",
+    "semantic_hash": "57f54d9f63d0b2c7afbef8522be500be"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/cmsis_compiler.h": {
+    "mtime": 1789322634.5480762,
+    "seen": 1790168624.8699944,
+    "ast_hash": "e9423cd042da523d81c70827e40503ef",
+    "semantic_hash": "e9423cd042da523d81c70827e40503ef"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/cmsis_gcc.h": {
+    "mtime": 1789322634.5480762,
+    "seen": 1790168624.869996,
+    "ast_hash": "55ddfef77d5b8468360f4fb0f6cbc561",
+    "semantic_hash": "55ddfef77d5b8468360f4fb0f6cbc561"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/cmsis_iccarm.h": {
+    "mtime": 1789322634.549065,
+    "seen": 1790168624.8699977,
+    "ast_hash": "949792a52a121613560a98ccc59efe0c",
+    "semantic_hash": "949792a52a121613560a98ccc59efe0c"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/cmsis_version.h": {
+    "mtime": 1789322634.549065,
+    "seen": 1790168624.8699994,
+    "ast_hash": "1e3b856c9ee7cb397a75afd2840e62dd",
+    "semantic_hash": "1e3b856c9ee7cb397a75afd2840e62dd"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/core_armv81mml.h": {
+    "mtime": 1789322634.5520642,
+    "seen": 1790168624.8700008,
+    "ast_hash": "9d68576f974c96a52220bd30efe248c8",
+    "semantic_hash": "9d68576f974c96a52220bd30efe248c8"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/core_armv8mbl.h": {
+    "mtime": 1789322634.5535727,
+    "seen": 1790168624.8700025,
+    "ast_hash": "2413f1c9b278d253044c32ab13945625",
+    "semantic_hash": "2413f1c9b278d253044c32ab13945625"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/core_armv8mml.h": {
+    "mtime": 1789322634.5545683,
+    "seen": 1790168624.8700042,
+    "ast_hash": "cfd0fc6bb4690fb142b849c6d9021c27",
+    "semantic_hash": "cfd0fc6bb4690fb142b849c6d9021c27"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/core_cm0.h": {
+    "mtime": 1789322634.555567,
+    "seen": 1790168624.8700058,
+    "ast_hash": "552990228c596bcf19dcd8b9858908b2",
+    "semantic_hash": "552990228c596bcf19dcd8b9858908b2"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/core_cm0plus.h": {
+    "mtime": 1789322634.5569036,
+    "seen": 1790168624.8700073,
+    "ast_hash": "d87342a0495bc58e532d517db9c34020",
+    "semantic_hash": "d87342a0495bc58e532d517db9c34020"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/core_cm1.h": {
+    "mtime": 1789322634.558896,
+    "seen": 1790168624.8700092,
+    "ast_hash": "389906ae751754cccf68dbd3e885b96c",
+    "semantic_hash": "389906ae751754cccf68dbd3e885b96c"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/core_cm23.h": {
+    "mtime": 1789322634.5604076,
+    "seen": 1790168624.8700106,
+    "ast_hash": "27bc264cb612e26536023cfd1af21070",
+    "semantic_hash": "27bc264cb612e26536023cfd1af21070"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/core_cm3.h": {
+    "mtime": 1789322634.5613997,
+    "seen": 1790168624.870012,
+    "ast_hash": "111a56c0bdf11f129e1c2351d93c891b",
+    "semantic_hash": "111a56c0bdf11f129e1c2351d93c891b"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/core_cm33.h": {
+    "mtime": 1789322634.5623991,
+    "seen": 1790168624.870014,
+    "ast_hash": "e66a23d355b7cc9634119cb6055ed668",
+    "semantic_hash": "e66a23d355b7cc9634119cb6055ed668"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/core_cm35p.h": {
+    "mtime": 1789322634.5643978,
+    "seen": 1790168624.8700154,
+    "ast_hash": "ebe7e88c438b2bd881c66a032ad31ac0",
+    "semantic_hash": "ebe7e88c438b2bd881c66a032ad31ac0"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/core_cm4.h": {
+    "mtime": 1789322634.5654118,
+    "seen": 1790168624.8700173,
+    "ast_hash": "f6acb64386d3cc3475cc14c2aba9af3e",
+    "semantic_hash": "f6acb64386d3cc3475cc14c2aba9af3e"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/core_cm55.h": {
+    "mtime": 1789322634.5674121,
+    "seen": 1790168624.870019,
+    "ast_hash": "fa470de83b6a619d130b89f320ee8d7c",
+    "semantic_hash": "fa470de83b6a619d130b89f320ee8d7c"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/core_cm7.h": {
+    "mtime": 1789322634.5694115,
+    "seen": 1790168624.8700209,
+    "ast_hash": "ed57b7f4cd2c64e8d45417cc67b9ca38",
+    "semantic_hash": "ed57b7f4cd2c64e8d45417cc67b9ca38"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/core_cm85.h": {
+    "mtime": 1789322634.5719306,
+    "seen": 1790168624.8700223,
+    "ast_hash": "92f72518d350bc3e56bf7e7dae051dfc",
+    "semantic_hash": "92f72518d350bc3e56bf7e7dae051dfc"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/core_sc000.h": {
+    "mtime": 1789322634.574053,
+    "seen": 1790168624.8700242,
+    "ast_hash": "b9fd7de28ad68ac5dfd2d711bd83b4c9",
+    "semantic_hash": "b9fd7de28ad68ac5dfd2d711bd83b4c9"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/core_sc300.h": {
+    "mtime": 1789322634.5750527,
+    "seen": 1790168624.8700259,
+    "ast_hash": "c314f307fb24f623b78ea9320abe5e02",
+    "semantic_hash": "c314f307fb24f623b78ea9320abe5e02"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/core_starmc1.h": {
+    "mtime": 1789322634.5760517,
+    "seen": 1790168624.8700275,
+    "ast_hash": "0b554a59aec4d3ee0c563a8b3ef80b9f",
+    "semantic_hash": "0b554a59aec4d3ee0c563a8b3ef80b9f"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/mpu_armv7.h": {
+    "mtime": 1789322634.5765636,
+    "seen": 1790168624.8700292,
+    "ast_hash": "33581ea22b0cab1ed6eefaac706fa772",
+    "semantic_hash": "33581ea22b0cab1ed6eefaac706fa772"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/mpu_armv8.h": {
+    "mtime": 1789322634.5765636,
+    "seen": 1790168624.870031,
+    "ast_hash": "6957dd64b462c2eefc92cb883a939d74",
+    "semantic_hash": "6957dd64b462c2eefc92cb883a939d74"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/pac_armv81.h": {
+    "mtime": 1789322634.577556,
+    "seen": 1790168624.8700325,
+    "ast_hash": "889815983412990e581eb61da6a42eda",
+    "semantic_hash": "889815983412990e581eb61da6a42eda"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/pmu_armv8.h": {
+    "mtime": 1789322634.577556,
+    "seen": 1790168624.8700342,
+    "ast_hash": "7eb19245eb9006213961db06bc86b9d5",
+    "semantic_hash": "7eb19245eb9006213961db06bc86b9d5"
+  },
+  "py32c642_vape/Libraries/CMSIS/Core/Include/tz_context.h": {
+    "mtime": 1789322634.577556,
+    "seen": 1790168624.870036,
+    "ast_hash": "1c5f40a94063779b674e03bf6fb00259",
+    "semantic_hash": "1c5f40a94063779b674e03bf6fb00259"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f002ax5.h": {
+    "mtime": 1789322634.581092,
+    "seen": 1790168624.8700376,
+    "ast_hash": "03831a3ec856ed364a3b20d11fb5604e",
+    "semantic_hash": "03831a3ec856ed364a3b20d11fb5604e"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f002bx5.h": {
+    "mtime": 1789322634.583274,
+    "seen": 1790168624.8700392,
+    "ast_hash": "8aad26155cb5588b82bd135cf849bfc2",
+    "semantic_hash": "8aad26155cb5588b82bd135cf849bfc2"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f002x5.h": {
+    "mtime": 1789322634.5877607,
+    "seen": 1790168624.8700411,
+    "ast_hash": "5041958a7eb3fa97958b64c9a371e381",
+    "semantic_hash": "5041958a7eb3fa97958b64c9a371e381"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f003.h": {
+    "mtime": 1789322634.59027,
+    "seen": 1790168624.8700428,
+    "ast_hash": "b0fc9a233b8c37d935753a3f7399e321",
+    "semantic_hash": "b0fc9a233b8c37d935753a3f7399e321"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f003x4.h": {
+    "mtime": 1789322634.5922644,
+    "seen": 1790168624.8700447,
+    "ast_hash": "855bc64fe8f2697d73788592a9353fb5",
+    "semantic_hash": "855bc64fe8f2697d73788592a9353fb5"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f003x6.h": {
+    "mtime": 1789322634.5937724,
+    "seen": 1790168624.8700461,
+    "ast_hash": "b45fe3d4aea6d7b40fddd0f17db45d18",
+    "semantic_hash": "b45fe3d4aea6d7b40fddd0f17db45d18"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f003x8.h": {
+    "mtime": 1789322634.5947678,
+    "seen": 1790168624.870048,
+    "ast_hash": "c5197532c540571f84a2886b3fd69e98",
+    "semantic_hash": "c5197532c540571f84a2886b3fd69e98"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f003xx.h": {
+    "mtime": 1789322634.5967667,
+    "seen": 1790168624.8700495,
+    "ast_hash": "b65f4ba3f90a6658ade9eb162afc05db",
+    "semantic_hash": "b65f4ba3f90a6658ade9eb162afc05db"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f030.h": {
+    "mtime": 1789322634.600789,
+    "seen": 1790168624.8700514,
+    "ast_hash": "d1924f52f9d651391729e1310bedb0fa",
+    "semantic_hash": "d1924f52f9d651391729e1310bedb0fa"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f030x3.h": {
+    "mtime": 1789322634.6027832,
+    "seen": 1790168624.8700528,
+    "ast_hash": "cc903fdb9ad0b11de098a55dd90c7444",
+    "semantic_hash": "cc903fdb9ad0b11de098a55dd90c7444"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f030x4.h": {
+    "mtime": 1789322634.6047828,
+    "seen": 1790168624.8700547,
+    "ast_hash": "ecc996bdb4507b63bd21fe9a9a0ee9cb",
+    "semantic_hash": "ecc996bdb4507b63bd21fe9a9a0ee9cb"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f030x6.h": {
+    "mtime": 1789322634.6067805,
+    "seen": 1790168624.8700562,
+    "ast_hash": "30b1c06efe510f7e9d49e717fb1b17f1",
+    "semantic_hash": "30b1c06efe510f7e9d49e717fb1b17f1"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f030x7.h": {
+    "mtime": 1789322634.6077802,
+    "seen": 1790168624.8700578,
+    "ast_hash": "3a64a9133111ffb3aa8beb52118df4db",
+    "semantic_hash": "3a64a9133111ffb3aa8beb52118df4db"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f030x8.h": {
+    "mtime": 1789322634.60878,
+    "seen": 1790168624.8700593,
+    "ast_hash": "f7f46ea4ed1ed74487c07ed7b8c6559b",
+    "semantic_hash": "f7f46ea4ed1ed74487c07ed7b8c6559b"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f030xx.h": {
+    "mtime": 1789322634.6143942,
+    "seen": 1790168624.8700607,
+    "ast_hash": "fe45ec04df9ed429004919079444d65e",
+    "semantic_hash": "fe45ec04df9ed429004919079444d65e"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f071x6.h": {
+    "mtime": 1789322634.616393,
+    "seen": 1790168624.8700624,
+    "ast_hash": "ecd3eb087041bc9e36190a03bca7ee86",
+    "semantic_hash": "ecd3eb087041bc9e36190a03bca7ee86"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f071x8.h": {
+    "mtime": 1789322634.617392,
+    "seen": 1790168624.870064,
+    "ast_hash": "0584d4d126993b3db3c61bd67c82f385",
+    "semantic_hash": "0584d4d126993b3db3c61bd67c82f385"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f071x9.h": {
+    "mtime": 1789322634.6198454,
+    "seen": 1790168624.8700655,
+    "ast_hash": "df34bdd0e19c93deca7786fbcfa7514f",
+    "semantic_hash": "df34bdd0e19c93deca7786fbcfa7514f"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f071xB.h": {
+    "mtime": 1789322634.6234665,
+    "seen": 1790168624.8700671,
+    "ast_hash": "72586b2cc3416478351bc12229e23c25",
+    "semantic_hash": "72586b2cc3416478351bc12229e23c25"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f072x6.h": {
+    "mtime": 1789322634.6269798,
+    "seen": 1790168624.8700688,
+    "ast_hash": "a572f7cbef8d89b6a28ad20d54cd8160",
+    "semantic_hash": "a572f7cbef8d89b6a28ad20d54cd8160"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f072x8.h": {
+    "mtime": 1789322634.6285884,
+    "seen": 1790168624.8700702,
+    "ast_hash": "09fd74cc3d937dbea388d454e4312072",
+    "semantic_hash": "09fd74cc3d937dbea388d454e4312072"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f072x9.h": {
+    "mtime": 1789322634.6307456,
+    "seen": 1790168624.870072,
+    "ast_hash": "a38a7148616e6294e5c1ccd8a8312c4e",
+    "semantic_hash": "a38a7148616e6294e5c1ccd8a8312c4e"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f072xB.h": {
+    "mtime": 1789322634.6327405,
+    "seen": 1790168624.8700736,
+    "ast_hash": "36ae9adf88ea9c39e55408daa39df311",
+    "semantic_hash": "36ae9adf88ea9c39e55408daa39df311"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/py32f0xx.h": {
+    "mtime": 1789322634.6327405,
+    "seen": 1790168624.8700776,
+    "ast_hash": "8a098c113f2361a3d07c3e8f81fc8229",
+    "semantic_hash": "8a098c113f2361a3d07c3e8f81fc8229"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/system_py32f003xx.h": {
+    "mtime": 1789322634.6341505,
+    "seen": 1790168624.8700793,
+    "ast_hash": "1c5b72c19ecbe98a0f001a7b06195105",
+    "semantic_hash": "1c5b72c19ecbe98a0f001a7b06195105"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/system_py32f030xx.h": {
+    "mtime": 1789322634.6341717,
+    "seen": 1790168624.870081,
+    "ast_hash": "ba94c07abc54795c7849ffb84c29633f",
+    "semantic_hash": "ba94c07abc54795c7849ffb84c29633f"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/system_py32f072xx.h": {
+    "mtime": 1789322634.6351523,
+    "seen": 1790168624.8700826,
+    "ast_hash": "2d56c396c6654f73909db0c53119c186",
+    "semantic_hash": "2d56c396c6654f73909db0c53119c186"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Include/system_py32f0xx.h": {
+    "mtime": 1789322634.6351523,
+    "seen": 1790168624.870084,
+    "ast_hash": "9b2e6ac0434c58af8389de0cf8f89e4a",
+    "semantic_hash": "9b2e6ac0434c58af8389de0cf8f89e4a"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Source/system_py32f002b.c": {
+    "mtime": 1789322634.6487162,
+    "seen": 1790168624.870086,
+    "ast_hash": "bd67423348d052bafcb101ac5f5f502a",
+    "semantic_hash": "bd67423348d052bafcb101ac5f5f502a"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Source/system_py32f07x.c": {
+    "mtime": 1789322634.6487162,
+    "seen": 1790168624.8700874,
+    "ast_hash": "3a754565beee8b1fdf9419d3f4863bbe",
+    "semantic_hash": "3a754565beee8b1fdf9419d3f4863bbe"
+  },
+  "py32c642_vape/Libraries/CMSIS/Device/PY32F0xx/Source/system_py32f0xx.c": {
+    "mtime": 1789322634.6497161,
+    "seen": 1790168624.870089,
+    "ast_hash": "48f470b87a19ec3786cb72691fc79240",
+    "semantic_hash": "48f470b87a19ec3786cb72691fc79240"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_BSP/Inc/py32f002b_bsp_printf.h": {
+    "mtime": 1789322634.6522326,
+    "seen": 1790168624.8700907,
+    "ast_hash": "c5ebc9ea8751de167b8d11749746d4c5",
+    "semantic_hash": "c5ebc9ea8751de167b8d11749746d4c5"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_BSP/Src/py32f002b_bsp_printf.c": {
+    "mtime": 1789322634.6532228,
+    "seen": 1790168624.8700924,
+    "ast_hash": "870e6d0654799f00790058b00550a029",
+    "semantic_hash": "870e6d0654799f00790058b00550a029"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Inc/py32f002b_hal.h": {
+    "mtime": 1789322634.655221,
+    "seen": 1790168624.870094,
+    "ast_hash": "19c8e7de4cba8eb775381d0b1bab116b",
+    "semantic_hash": "19c8e7de4cba8eb775381d0b1bab116b"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Inc/py32f002b_hal_adc.h": {
+    "mtime": 1789322634.6557317,
+    "seen": 1790168624.8700957,
+    "ast_hash": "f675ee895813533ba21ba14619f0d457",
+    "semantic_hash": "f675ee895813533ba21ba14619f0d457"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Inc/py32f002b_hal_comp.h": {
+    "mtime": 1789322634.6557317,
+    "seen": 1790168624.8700972,
+    "ast_hash": "603bc56c16ed71419be20b3bbd353e0e",
+    "semantic_hash": "603bc56c16ed71419be20b3bbd353e0e"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Inc/py32f002b_hal_cortex.h": {
+    "mtime": 1789322634.6567292,
+    "seen": 1790168624.8700986,
+    "ast_hash": "23554ab9caf2e7d255f235c28ca95c2d",
+    "semantic_hash": "23554ab9caf2e7d255f235c28ca95c2d"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Inc/py32f002b_hal_crc.h": {
+    "mtime": 1789322634.6577258,
+    "seen": 1790168624.8701005,
+    "ast_hash": "1356b5d2760545a24210dbe71ef53671",
+    "semantic_hash": "1356b5d2760545a24210dbe71ef53671"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Inc/py32f002b_hal_def.h": {
+    "mtime": 1789322634.6582365,
+    "seen": 1790168624.870102,
+    "ast_hash": "e451c4b8b113f4ef988bac26d9a39522",
+    "semantic_hash": "e451c4b8b113f4ef988bac26d9a39522"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Inc/py32f002b_hal_exti.h": {
+    "mtime": 1789322634.6582365,
+    "seen": 1790168624.8701036,
+    "ast_hash": "862e87fca28ad3ac693afe0b9b317ad6",
+    "semantic_hash": "862e87fca28ad3ac693afe0b9b317ad6"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Inc/py32f002b_hal_flash.h": {
+    "mtime": 1789322634.65923,
+    "seen": 1790168624.870105,
+    "ast_hash": "d2004eac75cf5660cd333a92b0d9dd4a",
+    "semantic_hash": "d2004eac75cf5660cd333a92b0d9dd4a"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Inc/py32f002b_hal_gpio.h": {
+    "mtime": 1789322634.65923,
+    "seen": 1790168624.870107,
+    "ast_hash": "183c0cc62c2ce32ae6788c7b29d5cae6",
+    "semantic_hash": "183c0cc62c2ce32ae6788c7b29d5cae6"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Inc/py32f002b_hal_gpio_ex.h": {
+    "mtime": 1789322634.6602297,
+    "seen": 1790168624.8701086,
+    "ast_hash": "be7aab97f65467c9fe4f13ae71cfe41a",
+    "semantic_hash": "be7aab97f65467c9fe4f13ae71cfe41a"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Inc/py32f002b_hal_i2c.h": {
+    "mtime": 1789322634.6602297,
+    "seen": 1790168624.8701105,
+    "ast_hash": "25a2d9c608c690fff75547588efa77a4",
+    "semantic_hash": "25a2d9c608c690fff75547588efa77a4"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Inc/py32f002b_hal_iwdg.h": {
+    "mtime": 1789322634.661229,
+    "seen": 1790168624.870112,
+    "ast_hash": "d8755b6c243613e2a80f6ca8386a7aa6",
+    "semantic_hash": "d8755b6c243613e2a80f6ca8386a7aa6"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Inc/py32f002b_hal_lptim.h": {
+    "mtime": 1789322634.6617374,
+    "seen": 1790168624.8701138,
+    "ast_hash": "c6564a54ba0c3093556d60cb5fc4b895",
+    "semantic_hash": "c6564a54ba0c3093556d60cb5fc4b895"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Inc/py32f002b_hal_pwr.h": {
+    "mtime": 1789322634.6617374,
+    "seen": 1790168624.8701153,
+    "ast_hash": "d93689e779a0e36ab03d9f3dc0b5fb9b",
+    "semantic_hash": "d93689e779a0e36ab03d9f3dc0b5fb9b"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Inc/py32f002b_hal_rcc.h": {
+    "mtime": 1789322634.6627333,
+    "seen": 1790168624.870117,
+    "ast_hash": "529d8881b1034618b4da0d9a60166e1c",
+    "semantic_hash": "529d8881b1034618b4da0d9a60166e1c"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Inc/py32f002b_hal_rcc_ex.h": {
+    "mtime": 1789322634.6627333,
+    "seen": 1790168624.8701186,
+    "ast_hash": "7ed31e929b7b86ffba930d17310cf968",
+    "semantic_hash": "7ed31e929b7b86ffba930d17310cf968"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Inc/py32f002b_hal_spi.h": {
+    "mtime": 1789322634.665249,
+    "seen": 1790168624.8701203,
+    "ast_hash": "96e211bc0b2332a06dbe021b7ae557ae",
+    "semantic_hash": "96e211bc0b2332a06dbe021b7ae557ae"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Inc/py32f002b_hal_tim.h": {
+    "mtime": 1789322634.6662405,
+    "seen": 1790168624.8701217,
+    "ast_hash": "2b1ae9f8d1b367a8ef58d6bd97ab0496",
+    "semantic_hash": "2b1ae9f8d1b367a8ef58d6bd97ab0496"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Inc/py32f002b_hal_tim_ex.h": {
+    "mtime": 1789322634.6672397,
+    "seen": 1790168624.8701236,
+    "ast_hash": "ee3b271411b06f79456a50abd2cc62d1",
+    "semantic_hash": "ee3b271411b06f79456a50abd2cc62d1"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Inc/py32f002b_hal_uart.h": {
+    "mtime": 1789322634.66803,
+    "seen": 1790168624.870125,
+    "ast_hash": "bd537803baf0a04cf9d5d143f2cf78b3",
+    "semantic_hash": "bd537803baf0a04cf9d5d143f2cf78b3"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Inc/py32f002b_hal_usart.h": {
+    "mtime": 1789322634.6685405,
+    "seen": 1790168624.8701265,
+    "ast_hash": "3b4971e1d6ff6fd1c39aab935edcb62c",
+    "semantic_hash": "3b4971e1d6ff6fd1c39aab935edcb62c"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Src/py32f002b_hal.c": {
+    "mtime": 1789322634.669534,
+    "seen": 1790168624.8701282,
+    "ast_hash": "4a2a1d8e7845f9a939a865beca331647",
+    "semantic_hash": "4a2a1d8e7845f9a939a865beca331647"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Src/py32f002b_hal_adc.c": {
+    "mtime": 1789322634.669534,
+    "seen": 1790168624.8701298,
+    "ast_hash": "51d40a418a267db43a673b6310af2488",
+    "semantic_hash": "51d40a418a267db43a673b6310af2488"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Src/py32f002b_hal_comp.c": {
+    "mtime": 1789322634.6705337,
+    "seen": 1790168624.8701317,
+    "ast_hash": "d15b31df02978ca74d6d34bb5fd232df",
+    "semantic_hash": "d15b31df02978ca74d6d34bb5fd232df"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Src/py32f002b_hal_cortex.c": {
+    "mtime": 1789322634.6705337,
+    "seen": 1790168624.8701334,
+    "ast_hash": "4a5ba6809364778cb67f6a5067e2224b",
+    "semantic_hash": "4a5ba6809364778cb67f6a5067e2224b"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Src/py32f002b_hal_crc.c": {
+    "mtime": 1789322634.671533,
+    "seen": 1790168624.8701353,
+    "ast_hash": "68675ef9d979739dc1d9fa3420e09c74",
+    "semantic_hash": "68675ef9d979739dc1d9fa3420e09c74"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Src/py32f002b_hal_exti.c": {
+    "mtime": 1789322634.671533,
+    "seen": 1790168624.8701367,
+    "ast_hash": "96d56976ba2747230c27006771a94e04",
+    "semantic_hash": "96d56976ba2747230c27006771a94e04"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Src/py32f002b_hal_flash.c": {
+    "mtime": 1789322634.6725323,
+    "seen": 1790168624.870139,
+    "ast_hash": "44c0ed63188a7788ec860e012b171e01",
+    "semantic_hash": "44c0ed63188a7788ec860e012b171e01"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Src/py32f002b_hal_gpio.c": {
+    "mtime": 1789322634.6725323,
+    "seen": 1790168624.8701403,
+    "ast_hash": "e49f157a6e0f9db0c01510b298eff09f",
+    "semantic_hash": "e49f157a6e0f9db0c01510b298eff09f"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Src/py32f002b_hal_i2c.c": {
+    "mtime": 1789322634.6745307,
+    "seen": 1790168624.870142,
+    "ast_hash": "98e8b0d867b146ac5def319f694eb1e7",
+    "semantic_hash": "98e8b0d867b146ac5def319f694eb1e7"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Src/py32f002b_hal_iwdg.c": {
+    "mtime": 1789322634.6745307,
+    "seen": 1790168624.8701437,
+    "ast_hash": "a334e68061d1ac392414023b3beee947",
+    "semantic_hash": "a334e68061d1ac392414023b3beee947"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Src/py32f002b_hal_lptim.c": {
+    "mtime": 1789322634.6755307,
+    "seen": 1790168624.8701453,
+    "ast_hash": "d67e45318fc824cac7a5ba16fecab9e1",
+    "semantic_hash": "d67e45318fc824cac7a5ba16fecab9e1"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Src/py32f002b_hal_pwr.c": {
+    "mtime": 1789322634.6755307,
+    "seen": 1790168624.8701468,
+    "ast_hash": "4eac1dc819567218ed8c200efa75daaf",
+    "semantic_hash": "4eac1dc819567218ed8c200efa75daaf"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Src/py32f002b_hal_rcc.c": {
+    "mtime": 1789322634.6765304,
+    "seen": 1790168624.8701484,
+    "ast_hash": "652aef233a05b9e4d7e7fc91e300df25",
+    "semantic_hash": "652aef233a05b9e4d7e7fc91e300df25"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Src/py32f002b_hal_rcc_ex.c": {
+    "mtime": 1789322634.6765304,
+    "seen": 1790168624.8701499,
+    "ast_hash": "2ee3900a8ae4de0726f666471fc321b2",
+    "semantic_hash": "2ee3900a8ae4de0726f666471fc321b2"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Src/py32f002b_hal_spi.c": {
+    "mtime": 1789322634.6795294,
+    "seen": 1790168624.8701515,
+    "ast_hash": "a7a4b6b94220cbf18d0825c496153397",
+    "semantic_hash": "a7a4b6b94220cbf18d0825c496153397"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Src/py32f002b_hal_tim.c": {
+    "mtime": 1789322634.6800468,
+    "seen": 1790168624.870153,
+    "ast_hash": "290c8dc19807df527345eb42356727cc",
+    "semantic_hash": "290c8dc19807df527345eb42356727cc"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Src/py32f002b_hal_tim_ex.c": {
+    "mtime": 1789322634.6810362,
+    "seen": 1790168624.8701544,
+    "ast_hash": "4c7e1dc1c9fe70c644471b98fa4b286a",
+    "semantic_hash": "4c7e1dc1c9fe70c644471b98fa4b286a"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Src/py32f002b_hal_uart.c": {
+    "mtime": 1789322634.6820357,
+    "seen": 1790168624.8701563,
+    "ast_hash": "e6980aa6adbe89790d127f4d4f4b4d71",
+    "semantic_hash": "e6980aa6adbe89790d127f4d4f4b4d71"
+  },
+  "py32c642_vape/Libraries/PY32F002B_HAL_Driver/Src/py32f002b_hal_usart.c": {
+    "mtime": 1789322634.6830354,
+    "seen": 1790168624.8701582,
+    "ast_hash": "d4a673bab52f24bada1fff7f62a1f035",
+    "semantic_hash": "d4a673bab52f24bada1fff7f62a1f035"
+  },
+  "tools/flash_loop.ps1": {
+    "mtime": 1789914589.70885,
+    "seen": 1790168624.8701594,
+    "ast_hash": "cab7171e3333d2992e2bb34cd17d9c23",
+    "semantic_hash": "cab7171e3333d2992e2bb34cd17d9c23"
+  },
+  "tools/flash_puya.py": {
+    "mtime": 1789891347.5714817,
+    "seen": 1790168624.8701608,
+    "ast_hash": "d8f58b0121fa2e0933fdb5a1fabc64a9",
+    "semantic_hash": "d8f58b0121fa2e0933fdb5a1fabc64a9"
+  },
+  "tools/flash_when_ready.py": {
+    "mtime": 1789613993.4108064,
+    "seen": 1790168624.8701625,
+    "ast_hash": "bed688d05eddc014051ef1318832f0ef",
+    "semantic_hash": "bed688d05eddc014051ef1318832f0ef"
+  },
+  "tools/halt.py": {
+    "mtime": 1789914862.7537315,
+    "seen": 1790168624.8701637,
+    "ast_hash": "710d4ff5ea024fb0421f1b750a23cb81",
+    "semantic_hash": "710d4ff5ea024fb0421f1b750a23cb81"
+  },
+  "tools/monitor_swd.py": {
+    "mtime": 1789585462.6980648,
+    "seen": 1790168624.870165,
+    "ast_hash": "5123242dfc32071da7d41a682739b43a",
+    "semantic_hash": "5123242dfc32071da7d41a682739b43a"
+  },
+  "tools/notify.py": {
+    "mtime": 1789460894.1186168,
+    "seen": 1790168624.8701665,
+    "ast_hash": "bc5f270af2efcac5a9941332a985a89e",
+    "semantic_hash": "bc5f270af2efcac5a9941332a985a89e"
+  },
+  "tools/prep_chrg_dg.py": {
+    "mtime": 1789668794.0820582,
+    "seen": 1790168624.8701677,
+    "ast_hash": "fbf40b4525e74a2cb456ab9f9241ec2d",
+    "semantic_hash": "fbf40b4525e74a2cb456ab9f9241ec2d"
+  },
+  "tools/prep_dg.py": {
+    "mtime": 1789614006.9947827,
+    "seen": 1790168624.8701692,
+    "ast_hash": "951463f4bbcb53a2100d8eec013b3815",
+    "semantic_hash": "951463f4bbcb53a2100d8eec013b3815"
+  },
+  "tools/prep_status_dg.py": {
+    "mtime": 1789642747.167069,
+    "seen": 1790168624.8701706,
+    "ast_hash": "e1bf58c711c018446eec9da5afe19185",
+    "semantic_hash": "e1bf58c711c018446eec9da5afe19185"
+  },
+  "tools/prep_swd_dg.py": {
+    "mtime": 1789642446.871449,
+    "seen": 1790168624.8701723,
+    "ast_hash": "bfa2c7be22362a459a1c79e9f258af6b",
+    "semantic_hash": "bfa2c7be22362a459a1c79e9f258af6b"
+  },
+  "tools/prep_victory_dg.py": {
+    "mtime": 1789858850.7122273,
+    "seen": 1790168624.8701737,
+    "ast_hash": "54324d3f823c1c0a2305f591adee0197",
+    "semantic_hash": "54324d3f823c1c0a2305f591adee0197"
+  },
+  "tools/read_state.py": {
+    "mtime": 1789897878.4378698,
+    "seen": 1790168624.870175,
+    "ast_hash": "399c3c36995db15a3f9c2f5107ba6574",
+    "semantic_hash": "399c3c36995db15a3f9c2f5107ba6574"
+  },
+  "tools/read_telemetry.py": {
+    "mtime": 1789892819.0402162,
+    "seen": 1790168624.8701766,
+    "ast_hash": "bb6f80e411e9c3e07c04863ebd3129a2",
+    "semantic_hash": "bb6f80e411e9c3e07c04863ebd3129a2"
+  },
+  "tools/spam.py": {
+    "mtime": 1789914809.223929,
+    "seen": 1790168624.8701777,
+    "ast_hash": "5ea6409049a0b198dfe53d16f71bfc62",
+    "semantic_hash": "5ea6409049a0b198dfe53d16f71bfc62"
+  },
+  "tools/unbrick.ps1": {
+    "mtime": 1789914689.844291,
+    "seen": 1790168624.8701794,
+    "ast_hash": "807038324816353d376aa5269dfd7fdb",
+    "semantic_hash": "807038324816353d376aa5269dfd7fdb"
+  },
+  "tools/update_code.py": {
+    "mtime": 1789613961.833415,
+    "seen": 1790168624.8701806,
+    "ast_hash": "961131db9851daa979410f375002cb32",
+    "semantic_hash": "961131db9851daa979410f375002cb32"
+  },
+  "tools/wait_and_flash.py": {
+    "mtime": 1789614134.0170023,
+    "seen": 1790168624.8701825,
+    "ast_hash": "39ee36fb15aa617c3fc96c1da1414c5f",
+    "semantic_hash": "39ee36fb15aa617c3fc96c1da1414c5f"
+  }
+}
