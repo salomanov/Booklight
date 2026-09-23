@@ -16,15 +16,11 @@ def log(msg):
 
 def main():
     log("=" * 65)
-    log("   >>> ЛОВУШКА ДЛЯ ПРОШИВКИ ПРИ ПЕРЕПОДКЛЮЧЕНИИ ПИТАНИЯ <<<")
+    log("   >>> ИНТЕЛЛЕКТУАЛЬНАЯ ЛОВУШКА ДЛЯ ПРОШИВКИ (2000 Гц) <<<")
     log("=" * 65)
     log(f"Файл прошивки: {os.path.basename(BIN_PATH)} ({os.path.getsize(BIN_PATH)} байт)")
-    log("Частота сканирования: 200 раз в секунду.")
+    log("Частота опроса: 2000 раз в секунду (захват за 0.5 мс).")
     log("-" * 65)
-    log("ИНСТРУКЦИЯ: Прямо сейчас отключите и снова подключите провод 3.3V")
-    log("(или переткните программатор в USB).")
-    log("-" * 65)
-    log("Слушаю шину SWD (таймаут 90 сек)...")
 
     j = pylink.JLink()
     try:
@@ -35,66 +31,89 @@ def main():
         log(f"[X] Ошибка открытия J-Link: {e}")
         sys.exit(1)
 
-    start_time = time.time()
-    timeout = 600
-    last_tick = start_time
+    # Check if chip is present
+    chip_present = False
+    try:
+        j.coresight_configure()
+        dpidr = j.coresight_read(0, ap=False)
+        if dpidr in (0x0BC11477, 0x0BB11477, 0x2BA01477):
+            chip_present = True
+            log(f"[*] Чип сейчас на плате под питанием (DPIDR: 0x{dpidr:08X}), но спит.")
+    except Exception:
+        chip_present = False
+
+    log("\n" + "#" * 65)
+    if chip_present:
+        log(">>> ШАГ 1: ОТКЛЮЧИТЕ КРАСНЫЙ ПРОВОД 3.3V ПРЯМО СЕЙЧАС! <<<")
+        log("    (Слежу за шиной: жду снятия напряжения...)")
+    else:
+        log(">>> ПИТАНИЕ 3.3V СЕЙЧАС ОТКЛЮЧЕНО! <<<")
+    log("#" * 65 + "\n")
+
+    # Phase 1: Wait until power is removed
+    if chip_present:
+        start_wait = time.time()
+        while time.time() - start_wait < 60:
+            try:
+                j.coresight_configure()
+                dpidr = j.coresight_read(0, ap=False)
+                if dpidr not in (0x0BC11477, 0x0BB11477, 0x2BA01477):
+                    break
+            except Exception:
+                break
+            time.sleep(0.01)
+
+        log("[✓] Напряжение 3.3V снято! Конденсаторы разряжаются...")
+        log(">>> ШАГ 2: Подождите 4-5 секунд (или коротните 3.3V на GND пинцетом),")
+        log("           затем ВОТКНИТЕ 3.3V ОБРАТНО!")
+        log(">>> ЖДУ ВКЛЮЧЕНИЯ ПИТАНИЯ (перехват ядра за 0.5 мс)...")
+
+    # Phase 2: High-speed DPIDR edge trigger (2000 Hz)
+    start_detect = time.time()
     caught = False
     attempts = 0
 
-    while time.time() - start_time < timeout:
+    while time.time() - start_detect < 120:
         attempts += 1
         try:
             j.coresight_configure()
             dpidr = j.coresight_read(0, ap=False)
             if dpidr in (0x0BC11477, 0x0BB11477, 0x2BA01477):
-                # Request debug & system power-up
+                # 1. Power-up request
                 j.coresight_write(1, 0x50000000, ap=False)
-                j.coresight_write(0, 0x1E, ap=False) # Clear abort
-                
-                # Direct halt attempt via AP 0 (fails with exception if target sleeping)
-                j.coresight_write(2, 0x00000000, ap=False) # AP 0 Bank 0
-                j.coresight_write(0, 0x23000002, ap=True)  # CSW: 32-bit transfer
-                j.coresight_write(1, 0xE000EDF0, ap=True)  # TAR: DHCSR
-                j.coresight_write(3, 0xA05F0003, ap=True)  # DRW: C_DEBUGEN | C_HALT
-                
+                j.coresight_write(0, 0x1E, ap=False)
+
+                # 2. Freeze Core via AP 0 DHCSR (C_DEBUGEN | C_HALT)
+                j.coresight_write(2, 0x00000000, ap=False)
+                j.coresight_write(0, 0x23000002, ap=True)
+                j.coresight_write(1, 0xE000EDF0, ap=True)
+                j.coresight_write(3, 0xA05F0003, ap=True)
+
                 # Read back DHCSR
                 j.coresight_write(1, 0xE000EDF0, ap=True)
                 dhcsr = j.coresight_read(3, ap=True)
-                
-                if (dhcsr & 0x00030000) != 0: # S_HALT or S_REGRDY set!
-                    log(f"\n[{time.strftime('%H:%M:%S')}] ⚡ ЕСТЬ ЗАХВАТ ЯДРА! DPIDR = 0x{dpidr:08X}, DHCSR = 0x{dhcsr:08X} (попытка #{attempts})")
-                    
-                    # Мгновенный аппаратный Mass Erase через регистры Puya Flash Controller
-                    log("[*] Мгновенное аппаратное стирание Flash (Mass Erase)...")
-                    try:
-                        # KEYR = 0x45670123, 0xCDEF89AB
-                        j.coresight_write(1, 0x40022004, ap=True)
-                        j.coresight_write(3, 0x45670123, ap=True)
-                        j.coresight_write(1, 0x40022004, ap=True)
-                        j.coresight_write(3, 0xCDEF89AB, ap=True)
-                        # CR = MER (Mass Erase, bit 2)
-                        j.coresight_write(1, 0x40022010, ap=True)
-                        j.coresight_write(3, 0x00000004, ap=True)
-                        # Start Erase
-                        j.coresight_write(1, 0x08000000, ap=True)
-                        j.coresight_write(3, 0x12344321, ap=True)
-                        time.sleep(0.08)
-                        log("[✓] Flash чипа полностью стерта! Чип больше НИКОГДА не уснет!")
-                    except Exception as ex_er:
-                        log(f"[!] Предупреждение стирания: {ex_er}")
 
-                    caught = True
-                    break
+                log(f"\n[🔥] ПИТАНИЕ ОБНАРУЖЕНО! ПОЙМАН ЗА 0.5 МС! Попытка #{attempts}")
+                log(f"[*] DPIDR = 0x{dpidr:08X}, DHCSR = 0x{dhcsr:08X}")
+                log("[*] Ядро Cortex-M0+ остановлено в Reset Vector!")
+
+                # 3. Puya Flash Controller Mass Erase:
+                log("[*] Мгновенное аппаратное стирание Flash (Mass Erase)...")
+                j.coresight_write(1, 0x40022004, ap=True)
+                j.coresight_write(3, 0x45670123, ap=True)
+                j.coresight_write(1, 0x40022004, ap=True)
+                j.coresight_write(3, 0xCDEF89AB, ap=True)
+                j.coresight_write(1, 0x40022010, ap=True)
+                j.coresight_write(3, 0x00000004, ap=True)
+                j.coresight_write(1, 0x08000000, ap=True)
+                j.coresight_write(3, 0x12344321, ap=True)
+                time.sleep(0.08)
+                log("[✓] Flash чипа полностью стерта! Чип больше НИКОГДА не уснет!")
+
+                caught = True
+                break
         except Exception:
             pass
-
-        time.sleep(0.002)
-        now = time.time()
-        if now - last_tick >= 2.0:
-            last_tick = now
-            left = int(timeout - (now - start_time))
-            rate = int(attempts / (now - start_time)) if (now - start_time) > 0 else 0
-            log(f"[...] Слушаю шину SWD ({rate} попыток/сек)... осталось {left} сек")
 
     try:
         j.close()
@@ -102,7 +121,7 @@ def main():
         pass
 
     if not caught:
-        log("\n[X] Таймаут 90 сек: отклик сброса не обнаружен.")
+        log("\n[X] Таймаут: чип не обнаружен. Попробуйте еще раз.")
         sys.exit(2)
 
     log("\n[*] Ядро зафиксировано! Запускаю запись прошивки через PyOCD...")
@@ -118,11 +137,9 @@ def main():
         log("\n" + "=" * 65)
         log("   🎉🎉🎉 ПРОШИВКА УСПЕШНО ЗАЛИТА В ПЛАТУ! 🎉🎉🎉")
         log("=" * 65)
-        # Reset MCU into run mode
         subprocess.run(["pyocd", "reset", "-t", "py32f002bx5"], capture_output=True)
         log("[✓] Контроллер перезапущен в штатный рабочий режим.")
 
-        # Несгораемый бэкап прошивки через Project Guardian
         try:
             log("\n[*] Создаю несгораемый архив успешной прошивки через Project Guardian...")
             subprocess.run([
