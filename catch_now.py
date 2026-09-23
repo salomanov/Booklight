@@ -108,6 +108,17 @@ def main():
         # Reset MCU into run mode
         subprocess.run(["pyocd", "reset", "-t", "py32f002bx5"], capture_output=True)
         log("[✓] Контроллер перезапущен в штатный рабочий режим.")
+
+        # Несгораемый бэкап прошивки через Project Guardian
+        try:
+            log("\n[*] Создаю несгораемый архив успешной прошивки через Project Guardian...")
+            subprocess.run([
+                "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+                r'& "C:\Users\Salomanov\.gemini\config\skills\project-guardian\scripts\checkpoint.ps1" -Message "Успешная прошивка через ловушку (Шаг 1: PA0 LED ON)" -Firmware'
+            ], cwd=r"c:\Users\Salomanov\Desktop\ВЕЙП")
+        except Exception as e_cp:
+            log(f"[!] Предупреждение бэкапа: {e_cp}")
+
         return True
     else:
         log("\n[!] Ошибка на этапе pyocd flash.")
