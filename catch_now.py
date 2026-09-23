@@ -99,15 +99,24 @@ def main():
 
                 # 3. Puya Flash Controller Mass Erase:
                 log("[*] Мгновенное аппаратное стирание Flash (Mass Erase)...")
-                j.coresight_write(1, 0x40022004, ap=True)
+                # Enable FLASH clock in RCC->AHBENR (0x40021014)
+                j.coresight_write(1, 0x40021014, ap=True)
+                j.coresight_write(3, 0x00000104, ap=True) # FLASHEN + IOPBEN
+
+                # KEYR unlock (0x40022008)
+                j.coresight_write(1, 0x40022008, ap=True)
                 j.coresight_write(3, 0x45670123, ap=True)
-                j.coresight_write(1, 0x40022004, ap=True)
+                j.coresight_write(1, 0x40022008, ap=True)
                 j.coresight_write(3, 0xCDEF89AB, ap=True)
-                j.coresight_write(1, 0x40022010, ap=True)
+
+                # CR = MER (Mass Erase, bit 2) at 0x40022014
+                j.coresight_write(1, 0x40022014, ap=True)
                 j.coresight_write(3, 0x00000004, ap=True)
+
+                # Trigger Erase by writing 0x12344321 to 0x08000000
                 j.coresight_write(1, 0x08000000, ap=True)
                 j.coresight_write(3, 0x12344321, ap=True)
-                time.sleep(0.08)
+                time.sleep(0.15)
                 log("[✓] Flash чипа полностью стерта! Чип больше НИКОГДА не уснет!")
 
                 caught = True
