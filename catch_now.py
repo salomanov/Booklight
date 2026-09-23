@@ -36,7 +36,7 @@ def main():
         sys.exit(1)
 
     start_time = time.time()
-    timeout = 90
+    timeout = 600
     last_tick = start_time
     caught = False
     attempts = 0
@@ -47,14 +47,15 @@ def main():
             j.coresight_configure()
             dpidr = j.coresight_read(0, ap=False)
             if dpidr in (0x0BC11477, 0x0BB11477, 0x2BA01477):
-                log(f"\n[{time.strftime('%H:%M:%S')}] ⚡ ЕСТЬ ОТКЛИК! DPIDR = 0x{dpidr:08X} (попытка #{attempts})")
+                # Request debug & system power-up
+                j.coresight_write(1, 0x50000000, ap=False)
+                j.coresight_write(0, 0x1E, ap=False) # Clear abort
                 
-                # Halt CoreSight Cortex-M0+
-                try:
-                    # Request debug & system power-up
-                    j.coresight_write(1, 0x50000000, ap=False)
-                    j.coresight_write(0, 0x1E, ap=False) # Clear abort
-                    
+                ctrl = j.coresight_read(1, ap=False)
+                cdbgpwrupack = (ctrl >> 29) & 1
+                
+                if cdbgpwrupack:
+                    # Debug power is UP! Core is awake or waking up!
                     # AP 0 Bank 0
                     j.coresight_write(2, 0x00000000, ap=False)
                     # CSW: 32-bit transfer
@@ -67,12 +68,11 @@ def main():
                     # Read back DHCSR
                     j.coresight_write(1, 0xE000EDF0, ap=True)
                     dhcsr = j.coresight_read(3, ap=True)
-                    log(f"[*] Статус ядра DHCSR = 0x{dhcsr:08X}")
-                except Exception as ex_halt:
-                    log(f"[!] Предупреждение при заморозке ядра: {ex_halt}")
-
-                caught = True
-                break
+                    
+                    if dhcsr & 0x00030000: # S_HALT bit is set!
+                        log(f"\n[{time.strftime('%H:%M:%S')}] ⚡ ЕСТЬ ЗАХВАТ ЯДРА! DPIDR = 0x{dpidr:08X}, DHCSR = 0x{dhcsr:08X} (попытка #{attempts})")
+                        caught = True
+                        break
         except Exception:
             pass
 

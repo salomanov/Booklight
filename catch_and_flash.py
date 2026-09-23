@@ -15,7 +15,7 @@ def log(msg):
     print(msg, flush=True)
 
 def main():
-    bin_file = sys.argv[1] if len(sys.argv) > 1 else r"c:\Users\Salomanov\Desktop\ВЕЙП\py32c642_vape\build\firmware.bin"
+    bin_file = sys.argv[1] if len(sys.argv) > 1 else r"c:\Users\Salomanov\Desktop\ВЕЙП\custom_firmware\build\battery_firmware.bin"
     if not os.path.exists(bin_file):
         log(f"[X] Файл прошивки не найден: {bin_file}")
         sys.exit(1)
@@ -45,13 +45,13 @@ def main():
     log("\n>>> [ ЛОВУШКА АКТИВИРОВАНА ] <<<")
     log("Частота опроса шины: ~70 раз в секунду.")
     log("------------------------------------------------------------")
-    log("ДЕЙСТВИЕ: Прямо сейчас разомкните и снова замкните провод 3.3V (красный),")
-    log("или коснитесь пинцетом/пальцем пятачка M (микрофона / сенсора)!")
+    log("ДЕЙСТВИЕ: Прямо сейчас отключите и снова подключите провод 3.3V")
+    log("(или переткните программатор в USB).")
     log("------------------------------------------------------------")
-    log("Ожидаю чип (таймаут 180 секунд)...")
+    log("Ожидаю включения микроконтроллера (таймаут 10 минут / 600 сек)...")
 
     start_time = time.time()
-    timeout = 180
+    timeout = 600
     attempts = 0
     last_heartbeat = start_time
     caught = False

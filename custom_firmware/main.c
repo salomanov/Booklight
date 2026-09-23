@@ -1,37 +1,50 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /**
-  ******************************************************************************
-  * @file    main.c
-  * @brief   E-Book Reading Lamp Firmware for PY32F002B / FH8020 (W39A_V1.4)
-  *          Features:
-  *          - Capacitive Touch Button control (Toggle ON/OFF, smooth fade, dimming ramp)
-  *          - Flexible 3V LED Filament drive with Gamma 2.2 perceptual PWM
-  *          - 1-Wire FH8016 Display (Battery %, 4-arc scale, charging animation)
-  *          - 15-minute inactivity timer with 1-minute smooth fade-out (interruptible)
-  *          - Ultra-low-power STOP mode deep sleep (< 10 uA) with EXTI wakeup
-  ******************************************************************************
-  */
+ ******************************************************************************
+ * @file    main.c
+ * @brief   E-Book Reading Lamp - STEP 1: Basic LED Test & SWD Keep-Alive
+ *          MCU: PUYA PY32F002Bx5 (ARM Cortex-M0+ @ 24MHz)
+ *          Board: CXV0257-V1.3
+ * 
+ *          Hardware pinout:
+ *          - PA0 (Pin 13): MOSFET 1 Gate -> LED Filament (Active HIGH)
+ *          - PA5 (Pin 18): MOSFET 2 Gate -> Second channel (Active HIGH)
+ *          - SWD Debug: DBGMCU enabled, CoreSight debug active in RUN & STOP
+ ******************************************************************************
+ */
 
-#include "py32f002b_hal.h"
-#include "book_light.h"
+#include "py32f0xx.h"
 
 int main(void)
 {
-    /* 1. Initialize HAL driver */
-    HAL_Init();
+    /* 1. Enable DBGMCU peripheral clock and keep SWD debug port active in STOP mode */
+    RCC->APBENR1 |= RCC_APBENR1_DBGEN;
+    DBGMCU->CR |= DBGMCU_CR_DBG_STOP;
 
-    /* 2. Configure SysTick for 20 kHz (50 us period)
-     *    - Fast software PWM for LED filament (200 Hz across 100 duty steps)
-     *    - 1 ms system timebase (every 20 ticks)
-     */
-    SysTick_Config(SystemCoreClock / 20000);
+    /* 2. Enable GPIOA clock */
+    RCC->IOPENR |= RCC_IOPENR_GPIOAEN;
 
-    /* 3. Initialize E-Book Lamp hardware (GPIO, ADC, Display, State) */
-    book_light_init();
+    /* 3. Configure PA0 (Pin 13) and PA5 (Pin 18) as Output Push-Pull */
+    /* PA0: MODER[1:0] = 01 (General purpose output) */
+    GPIOA->MODER &= ~(GPIO_MODER_MODE0);
+    GPIOA->MODER |= (GPIO_MODER_MODE0_0);
+    GPIOA->OTYPER &= ~(1U << 0);
+    GPIOA->OSPEEDR |= (3U << 0);
+    GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPD0);
 
-    /* 4. Main Event Loop */
+    /* PA5: MODER[11:10] = 01 (General purpose output) */
+    GPIOA->MODER &= ~(GPIO_MODER_MODE5);
+    GPIOA->MODER |= (GPIO_MODER_MODE5_0);
+    GPIOA->OTYPER &= ~(1U << 5);
+    GPIOA->OSPEEDR |= (3U << (5 * 2));
+    GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPD5);
+
+    /* 4. Turn PA0 and PA5 HIGH (LED filament turns ON permanently) */
+    GPIOA->BSRR = GPIO_BSRR_BS0 | GPIO_BSRR_BS5;
+
+    /* 5. Main loop - controller stays awake, SWD is 100% accessible 24/7 */
     while (1)
     {
-        book_light_loop();
+        __NOP();
     }
 }
