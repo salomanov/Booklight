@@ -2,7 +2,8 @@ import sys
 import time
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, 
-    QHBoxLayout, QLabel, QPushButton, QFrame, QRadioButton, QButtonGroup, QGridLayout
+    QHBoxLayout, QLabel, QPushButton, QFrame, QRadioButton, 
+    QSlider, QGridLayout
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont
@@ -11,9 +12,11 @@ from pyocd.core.helpers import ConnectHelper
 # Hardware Register Addresses for PUYA PY32F002B
 RCC_BASE    = 0x40021000
 RCC_IOPENR  = RCC_BASE + 0x34
+RCC_APBENR2 = RCC_BASE + 0x3C
 
 GPIOA_BASE  = 0x50000000
 GPIOA_MODER = GPIOA_BASE + 0x00
+GPIOA_AFR0  = GPIOA_BASE + 0x20
 GPIOA_ODR   = GPIOA_BASE + 0x14
 GPIOA_BSRR  = GPIOA_BASE + 0x18
 
@@ -22,20 +25,28 @@ GPIOB_MODER = GPIOB_BASE + 0x00
 GPIOB_ODR   = GPIOB_BASE + 0x14
 GPIOB_BSRR  = GPIOB_BASE + 0x18
 
+# TIM1 (Advanced-control Timer)
+TIM1_BASE   = 0x40012C00
+TIM1_CR1    = TIM1_BASE + 0x00
+TIM1_PSC    = TIM1_BASE + 0x28
+TIM1_ARR    = TIM1_BASE + 0x2C
+TIM1_CCR1   = TIM1_BASE + 0x34
+TIM1_BDTR   = TIM1_BASE + 0x44
+
 TARGET = 'py32f002bx5'
 
 
 class SwdWorker(QThread):
     connection_changed = pyqtSignal(bool, str)
-    state_updated      = pyqtSignal(int, int, int, int, int)  # pa0, pb3, pb2, odr_a, odr_b
+    state_updated      = pyqtSignal(int, int, int, int, int, int) # ccr1, pb3, pb2, odr_a, odr_b, tim1_cr1
 
     def __init__(self):
         super().__init__()
         self.running = True
         self.command_queue = []
 
-    def queue_command(self, port, bsrr_val):
-        self.command_queue.append((port, bsrr_val))
+    def queue_command(self, cmd_type, val):
+        self.command_queue.append((cmd_type, val))
 
     def stop(self):
         self.running = False
@@ -56,42 +67,29 @@ class SwdWorker(QThread):
                     )
                     session.open()
                     target = session.target
-
-                    # Ensure Clocks & GPIO modes are configured
-                    try:
-                        iopenr = target.read32(RCC_IOPENR)
-                        target.write32(RCC_IOPENR, iopenr | 0x03) # GPIOAEN | GPIOBEN
-
-                        # PA0 as Output Push-Pull (bits 1:0 = 01)
-                        moder_a = target.read32(GPIOA_MODER)
-                        target.write32(GPIOA_MODER, (moder_a & ~0x03) | 0x01)
-
-                        # PB2 and PB3 as Output Push-Pull (bits 7:4 = 0101 -> 0x50)
-                        moder_b = target.read32(GPIOB_MODER)
-                        target.write32(GPIOB_MODER, (moder_b & ~0xF0) | 0x50)
-                    except Exception as e:
-                        print(f"GPIO config warning: {e}")
-
                     connected = True
                     self.connection_changed.emit(True, "J-Link STLink: Подключено (SWD 24/7 активен)")
 
                 # Execute pending write commands
                 while self.command_queue:
-                    port, bsrr_val = self.command_queue.pop(0)
-                    if port == 'A':
-                        target.write32(GPIOA_BSRR, bsrr_val)
-                    elif port == 'B':
-                        target.write32(GPIOB_BSRR, bsrr_val)
+                    cmd_type, val = self.command_queue.pop(0)
+                    if cmd_type == 'CCR1':
+                        target.write32(TIM1_CCR1, val)
+                    elif cmd_type == 'B':
+                        target.write32(GPIOB_BSRR, val)
+                    elif cmd_type == 'A':
+                        target.write32(GPIOA_BSRR, val)
 
-                # Read current hardware GPIO output states
+                # Read hardware states
+                ccr1 = target.read32(TIM1_CCR1)
+                cr1  = target.read32(TIM1_CR1)
                 odr_a = target.read32(GPIOA_ODR)
                 odr_b = target.read32(GPIOB_ODR)
 
-                pa0 = (odr_a >> 0) & 1
                 pb3 = (odr_b >> 3) & 1
                 pb2 = (odr_b >> 2) & 1
 
-                self.state_updated.emit(pa0, pb3, pb2, odr_a, odr_b)
+                self.state_updated.emit(ccr1, pb3, pb2, odr_a, odr_b, cr1)
                 self.msleep(80)
 
             except Exception as e:
@@ -117,22 +115,23 @@ class SwdWorker(QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("BookLight — Пульт управления 3 каналами (PA0, PB3, PB2)")
-        self.setFixedSize(650, 720)
+        self.setWindowTitle("BookLight — Пульт управления: Аппаратный ШИМ TIM1 + 3 канала")
+        self.setFixedSize(680, 780)
 
-        # Inversion flags: False = HIGH opens (N-FET), True = LOW opens (P-FET)
-        self.inv_pb3 = True  # P-channel MOSFET (0V / LOW turns on)
-        self.inv_pb2 = True  # P-channel MOSFET (0V / LOW turns on)
+        # Inversion flags: True = LOW opens (P-FET), False = HIGH opens (N-FET)
+        self.inv_pb3 = True
+        self.inv_pb2 = True
 
-        # Blink timers
-        self.blink_timer = QTimer(self)
-        self.blink_timer.timeout.connect(self.on_blink_tick)
-        self.blink_active_pa0 = False
-        self.blink_state = False
-
-        self.last_pa0 = 0
+        self.last_ccr1 = 500
         self.last_pb3 = 1
         self.last_pb2 = 1
+
+        # Breathing effect timer
+        self.breathe_timer = QTimer(self)
+        self.breathe_timer.timeout.connect(self.on_breathe_tick)
+        self.breathe_active = False
+        self.breathe_val = 50
+        self.breathe_dir = 2
 
         self.worker = SwdWorker()
         self.worker.connection_changed.connect(self.on_connection_changed)
@@ -170,6 +169,23 @@ class MainWindow(QMainWindow):
                 color: #64B5F6;
                 font-weight: bold;
             }
+            QSlider::groove:horizontal {
+                height: 8px;
+                background: #2D333B;
+                border-radius: 4px;
+            }
+            QSlider::sub-page:horizontal {
+                background: #2ecc71;
+                border-radius: 4px;
+            }
+            QSlider::handle:horizontal {
+                background: #ffffff;
+                border: 2px solid #27ae60;
+                width: 22px;
+                margin-top: -7px;
+                margin-bottom: -7px;
+                border-radius: 11px;
+            }
         """)
 
         central = QWidget()
@@ -195,44 +211,54 @@ class MainWindow(QMainWindow):
         status_layout.addWidget(self.status_text, 1)
         root.addWidget(status_card)
 
-        # ─── Channel 1: On-board Indicator LED (PA0) ───
+        # ─── Channel 1: Hardware PWM TIM1_CH1 (PA0) ───
         ch1_card = QFrame()
         ch1_card.setProperty("class", "card")
         ch1_layout = QVBoxLayout(ch1_card)
         ch1_layout.setSpacing(10)
 
         ch1_header = QHBoxLayout()
-        ch1_title = QLabel("💡 Канал 1: Индикаторный LED платы (PA0 / Пин 13)")
+        ch1_title = QLabel("💡 Канал 1: Аппаратный ШИМ TIM1_CH1 (PA0 / Пин 13)")
         ch1_title.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
-        self.ch1_badge = QLabel("ВЫКЛ")
-        self.ch1_badge.setStyleSheet("background-color: #242933; color: #8892B0; padding: 4px 10px; border-radius: 6px; font-weight: bold;")
+        self.ch1_badge = QLabel("ШИМ: 50%")
+        self.ch1_badge.setStyleSheet("background-color: #27ae60; color: white; padding: 4px 10px; border-radius: 6px; font-weight: bold;")
         ch1_header.addWidget(ch1_title)
         ch1_header.addStretch()
         ch1_header.addWidget(self.ch1_badge)
         ch1_layout.addLayout(ch1_header)
 
-        ch1_btns = QHBoxLayout()
-        self.btn_pa0_toggle = QPushButton("🔄 Переключить (Toggle)")
-        self.btn_pa0_toggle.setStyleSheet("background-color: #2980b9; color: white;")
-        self.btn_pa0_toggle.clicked.connect(self.toggle_pa0)
+        # Slider and Brightness Readout
+        slider_row = QHBoxLayout()
+        self.slider_label = QLabel("50%")
+        self.slider_label.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+        self.slider_label.setFixedWidth(55)
+        self.slider_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.slider_label.setStyleSheet("color: #2ecc71;")
 
-        self.btn_pa0_on = QPushButton("ВКЛ (1)")
-        self.btn_pa0_on.setStyleSheet("background-color: #27ae60; color: white;")
-        self.btn_pa0_on.clicked.connect(lambda: self.set_pa0(1))
+        self.slider = QSlider(Qt.Orientation.Horizontal)
+        self.slider.setRange(0, 100)
+        self.slider.setValue(50)
+        self.slider.valueChanged.connect(self.on_slider_changed)
 
-        self.btn_pa0_off = QPushButton("ВЫКЛ (0)")
-        self.btn_pa0_off.setStyleSheet("background-color: #c0392b; color: white;")
-        self.btn_pa0_off.clicked.connect(lambda: self.set_pa0(0))
+        slider_row.addWidget(self.slider, 1)
+        slider_row.addWidget(self.slider_label)
+        ch1_layout.addLayout(slider_row)
 
-        self.btn_pa0_blink = QPushButton("⚡ Мигать")
-        self.btn_pa0_blink.setStyleSheet("background-color: #34495e; color: white;")
-        self.btn_pa0_blink.clicked.connect(self.toggle_pa0_blink)
+        # Presets Buttons Row
+        preset_row = QHBoxLayout()
+        preset_row.setSpacing(8)
+        for pct in [0, 10, 25, 50, 75, 100]:
+            btn = QPushButton(f"{pct}%" if pct > 0 else "0% (ВЫКЛ)")
+            btn.setStyleSheet("background-color: #242933; color: #E0E0E0; padding: 6px 10px; font-size: 11px;")
+            btn.clicked.connect(lambda _, p=pct: self.slider.setValue(p))
+            preset_row.addWidget(btn)
 
-        ch1_btns.addWidget(self.btn_pa0_toggle, 2)
-        ch1_btns.addWidget(self.btn_pa0_on, 1)
-        ch1_btns.addWidget(self.btn_pa0_off, 1)
-        ch1_btns.addWidget(self.btn_pa0_blink, 1)
-        ch1_layout.addLayout(ch1_btns)
+        self.btn_breathe = QPushButton("🌊 Эффект дыхания")
+        self.btn_breathe.setStyleSheet("background-color: #2980b9; color: white; padding: 6px 12px; font-size: 11px;")
+        self.btn_breathe.clicked.connect(self.toggle_breathe)
+        preset_row.addWidget(self.btn_breathe)
+
+        ch1_layout.addLayout(preset_row)
         root.addWidget(ch1_card)
 
         # ─── Channel 2: Filament 1 (PB3 / Pin 9 -> Coil Pad 1) ───
@@ -271,12 +297,10 @@ class MainWindow(QMainWindow):
         self.btn_pb3_toggle.clicked.connect(self.toggle_filament1)
 
         self.btn_pb3_low = QPushButton("0V (LOW)")
-        self.btn_pb3_low.setToolTip("Установить на затворе 0V")
         self.btn_pb3_low.setStyleSheet("background-color: #2c3e50; color: #ecf0f1;")
         self.btn_pb3_low.clicked.connect(lambda: self.set_pb3_direct(0))
 
         self.btn_pb3_high = QPushButton("3.3V (HIGH)")
-        self.btn_pb3_high.setToolTip("Установить на затворе 3.3V")
         self.btn_pb3_high.setStyleSheet("background-color: #2c3e50; color: #ecf0f1;")
         self.btn_pb3_high.clicked.connect(lambda: self.set_pb3_direct(1))
 
@@ -322,12 +346,10 @@ class MainWindow(QMainWindow):
         self.btn_pb2_toggle.clicked.connect(self.toggle_filament2)
 
         self.btn_pb2_low = QPushButton("0V (LOW)")
-        self.btn_pb2_low.setToolTip("Установить на затворе 0V")
         self.btn_pb2_low.setStyleSheet("background-color: #2c3e50; color: #ecf0f1;")
         self.btn_pb2_low.clicked.connect(lambda: self.set_pb2_direct(0))
 
         self.btn_pb2_high = QPushButton("3.3V (HIGH)")
-        self.btn_pb2_high.setToolTip("Установить на затворе 3.3V")
         self.btn_pb2_high.setStyleSheet("background-color: #2c3e50; color: #ecf0f1;")
         self.btn_pb2_high.clicked.connect(lambda: self.set_pb2_direct(1))
 
@@ -337,13 +359,13 @@ class MainWindow(QMainWindow):
         ch3_layout.addLayout(ch3_btns)
         root.addWidget(ch3_card)
 
-        # ─── Master Control & Live Registers ───
+        # ─── Master Control & Live Hardware Readouts ───
         master_card = QFrame()
         master_card.setProperty("class", "card")
         master_layout = QVBoxLayout(master_card)
 
         m_btns = QHBoxLayout()
-        self.btn_all_on = QPushButton("🌟 Зажечь ВСЕ 3 канала")
+        self.btn_all_on = QPushButton("🌟 Зажечь ВСЕ каналы")
         self.btn_all_on.setStyleSheet("background-color: #27ae60; color: white; padding: 12px;")
         self.btn_all_on.clicked.connect(self.turn_all_on)
 
@@ -355,7 +377,7 @@ class MainWindow(QMainWindow):
         m_btns.addWidget(self.btn_all_off)
         master_layout.addLayout(m_btns)
 
-        self.reg_label = QLabel("Регистры: GPIOA_ODR: -- | GPIOB_ODR: --")
+        self.reg_label = QLabel("Аппаратный таймер: TIM1_CCR1: 500 / 1000 | Частота: 1.0 кГц | GPIOB_ODR: --")
         self.reg_label.setFont(QFont("Consolas", 10))
         self.reg_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.reg_label.setStyleSheet("color: #8892B0; margin-top: 6px;")
@@ -371,18 +393,44 @@ class MainWindow(QMainWindow):
             self.status_dot.setStyleSheet("color: #e74c3c;")
             self.status_text.setText(message)
 
-    def on_state_updated(self, pa0, pb3, pb2, odr_a, odr_b):
-        self.last_pa0 = pa0
+    def on_slider_changed(self, value):
+        self.slider_label.setText(f"{value}%")
+        ccr1_val = int(value * 10)  # 0..1000
+        self.worker.queue_command('CCR1', ccr1_val)
+
+    def toggle_breathe(self):
+        self.breathe_active = not self.breathe_active
+        if self.breathe_active:
+            self.btn_breathe.setText("⏸ Стоп дыхание")
+            self.btn_breathe.setStyleSheet("background-color: #e67e22; color: white; padding: 6px 12px; font-size: 11px;")
+            self.breathe_timer.start(30)
+        else:
+            self.btn_breathe.setText("🌊 Эффект дыхания")
+            self.btn_breathe.setStyleSheet("background-color: #2980b9; color: white; padding: 6px 12px; font-size: 11px;")
+            self.breathe_timer.stop()
+
+    def on_breathe_tick(self):
+        self.breathe_val += self.breathe_dir
+        if self.breathe_val >= 100:
+            self.breathe_val = 100
+            self.breathe_dir = -2
+        elif self.breathe_val <= 0:
+            self.breathe_val = 0
+            self.breathe_dir = 2
+        self.slider.setValue(self.breathe_val)
+
+    def on_state_updated(self, ccr1, pb3, pb2, odr_a, odr_b, tim1_cr1):
+        self.last_ccr1 = ccr1
         self.last_pb3 = pb3
         self.last_pb2 = pb2
 
-        # Channel 1 (PA0, 1 = ON)
-        if pa0 == 1:
-            self.ch1_badge.setText("СВЕТИТ (HIGH)")
-            self.ch1_badge.setStyleSheet("background-color: #27ae60; color: white; padding: 4px 10px; border-radius: 6px; font-weight: bold;")
-        else:
-            self.ch1_badge.setText("ВЫКЛ (LOW)")
+        pct = int(ccr1 / 10)
+        if pct == 0:
+            self.ch1_badge.setText("ВЫКЛ (0%)")
             self.ch1_badge.setStyleSheet("background-color: #242933; color: #8892B0; padding: 4px 10px; border-radius: 6px; font-weight: bold;")
+        else:
+            self.ch1_badge.setText(f"ШИМ {pct}% (1 кГц)")
+            self.ch1_badge.setStyleSheet("background-color: #27ae60; color: white; padding: 4px 10px; border-radius: 6px; font-weight: bold;")
 
         # Channel 2 (PB3)
         fil1_active = (pb3 == 0) if self.inv_pb3 else (pb3 == 1)
@@ -405,33 +453,8 @@ class MainWindow(QMainWindow):
             self.ch3_badge.setStyleSheet("background-color: #242933; color: #8892B0; padding: 4px 10px; border-radius: 6px; font-weight: bold;")
 
         self.reg_label.setText(
-            f"Регистры: GPIOA_ODR: 0x{odr_a:04X} (PA0={pa0}) | GPIOB_ODR: 0x{odr_b:04X} (PB3={pb3}, PB2={pb2})"
+            f"Аппаратный таймер: TIM1_CCR1={ccr1}/1000 ({pct}%) | GPIOB_ODR: 0x{odr_b:04X} (PB3={pb3}, PB2={pb2})"
         )
-
-    # ─── PA0 Controls ───
-    def set_pa0(self, state):
-        cmd = (1 << 0) if state else (1 << 16)
-        self.worker.queue_command('A', cmd)
-
-    def toggle_pa0(self):
-        new_state = 0 if self.last_pa0 == 1 else 1
-        self.set_pa0(new_state)
-
-    def toggle_pa0_blink(self):
-        self.blink_active_pa0 = not self.blink_active_pa0
-        if self.blink_active_pa0:
-            self.btn_pa0_blink.setText("⏸ Стоп")
-            self.btn_pa0_blink.setStyleSheet("background-color: #e67e22; color: white;")
-            self.blink_timer.start(500)
-        else:
-            self.btn_pa0_blink.setText("⚡ Мигать")
-            self.btn_pa0_blink.setStyleSheet("background-color: #34495e; color: white;")
-            self.blink_timer.stop()
-
-    def on_blink_tick(self):
-        self.blink_state = not self.blink_state
-        if self.blink_active_pa0:
-            self.set_pa0(1 if self.blink_state else 0)
 
     # ─── PB3 / Filament 1 Controls ───
     def set_pb3_direct(self, level):
@@ -440,12 +463,7 @@ class MainWindow(QMainWindow):
 
     def toggle_filament1(self):
         is_active = (self.last_pb3 == 0) if self.inv_pb3 else (self.last_pb3 == 1)
-        # To turn off: if P-FET set HIGH (1), else set LOW (0)
-        # To turn on: if P-FET set LOW (0), else set HIGH (1)
-        if is_active:
-            new_level = 1 if self.inv_pb3 else 0
-        else:
-            new_level = 0 if self.inv_pb3 else 1
+        new_level = (1 if is_active else 0) if self.inv_pb3 else (0 if is_active else 1)
         self.set_pb3_direct(new_level)
 
     # ─── PB2 / Filament 2 Controls ───
@@ -455,25 +473,22 @@ class MainWindow(QMainWindow):
 
     def toggle_filament2(self):
         is_active = (self.last_pb2 == 0) if self.inv_pb2 else (self.last_pb2 == 1)
-        if is_active:
-            new_level = 1 if self.inv_pb2 else 0
-        else:
-            new_level = 0 if self.inv_pb2 else 1
+        new_level = (1 if is_active else 0) if self.inv_pb2 else (0 if is_active else 1)
         self.set_pb2_direct(new_level)
 
     # ─── Master All Controls ───
     def turn_all_on(self):
-        self.set_pa0(1)
+        self.slider.setValue(100)
         self.set_pb3_direct(0 if self.inv_pb3 else 1)
         self.set_pb2_direct(0 if self.inv_pb2 else 1)
 
     def turn_all_off(self):
-        self.set_pa0(0)
+        self.slider.setValue(0)
         self.set_pb3_direct(1 if self.inv_pb3 else 0)
         self.set_pb2_direct(1 if self.inv_pb2 else 0)
 
     def closeEvent(self, event):
-        self.blink_timer.stop()
+        self.breathe_timer.stop()
         self.worker.stop()
         event.accept()
 

@@ -38,7 +38,7 @@ void PendSV_Handler(void)
  */
 static volatile uint8_t systick_ms_div = 0;
 
-void SysTick_Handler(void)
+__attribute__((weak)) void SysTick_Handler(void)
 {
     /* 1. Fast PWM Step (200 Hz PWM across 100 duty steps) */
     book_light_pwm_tick();
