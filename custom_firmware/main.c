@@ -2,16 +2,16 @@
 /**
  ******************************************************************************
  * @file    main.c
- * @brief   E-Book Reading Lamp - STEP 3 & 4: GyverLED + GyverButton + Gamma 2.2
+ * @brief   E-Book Reading Lamp - STEP 3 & 4: Independent Channels + GyverLED
  *          MCU: PUYA PY32F002Bx5 (ARM Cortex-M0+ @ 24MHz)
  *          Board: CXV0257-V1.3
  * 
  *          Hardware pinout:
- *          - PA0 (Pin 13): TIM1_CH1 (AF2) -> Indicator LED (1.0 kHz Hardware PWM)
- *          - PB2 (Pin 10): TIM1_CH3 (AF3) -> Power MOSFET 2 (Coil Pad 2: All 4 Filaments)
+ *          - PA0 (Pin 13): TIM1_CH1 (AF2) -> Test Board LED (0..100% PWM, 0% = 100% OFF)
+ *          - PB2 (Pin 10): TIM1_CH3 (AF3) -> Coil Pad 2 (All 4 Filaments, P-FET CJ3415 up to 4.0A)
  *                          P-Channel FET (Active LOW via CC3P, 1.0 kHz Hardware PWM, 0% CPU)
- *          - PB3 (Pin 9):  Power MOSFET 1 (Coil Pad 1) -> Safe Output HIGH (Closed)
- *          - PB4 (Pin 8):  Touch Button (Pad M+ / TTP223) -> Input Pull-down
+ *          - PB3 (Pin 9):  Coil Pad 1 (Safe Output HIGH / Closed)
+ *          - PB4 (Pin 8):  Touch Sensor (Pad M+ / TTP223) -> Input Pull-down
  *          - SWD Debug:    DBGMCU enabled, CoreSight debug active 24/7
  ******************************************************************************
  */
@@ -24,23 +24,43 @@
 
 /* Shared memory block for SWD control and telemetry */
 typedef struct {
-    uint32_t magic;           // 0x50574D31 ('PWM1')
-    uint32_t target_brightness;// 0..255
-    uint32_t current_brightness;// 0..255
-    uint32_t pwm_raw;         // 0..1000 (actual TIM1_CCR3 hardware value)
-    uint32_t touch_raw;       // 1 = touch detected on PB4, 0 = idle
-    uint32_t fade_time_ms;    // Fade duration in ms (default 350 ms)
-    uint32_t lamp_state;      // 0 = OFF, 1 = ON
+    uint32_t magic;              // +0x00: 0x50574D31 ('PWM1')
+    
+    /* Channel 1: Filaments (PB2 / TIM1_CH3) */
+    uint32_t fil_target_pct;     // +0x04: 0..100% (target brightness)
+    uint32_t fil_current_pct;    // +0x08: 0..100% (live interpolated)
+    uint32_t fil_pwm_raw;        // +0x0C: 0..1000 (actual TIM1_CCR3)
+    uint32_t fil_state;          // +0x10: 0 = OFF, 1 = ON
+    uint32_t fil_saved_pct;      // +0x14: Last ON value (1..100%, default 50%)
+    
+    /* Channel 2: Board LEDs (PA0 / TIM1_CH1) */
+    uint32_t led_target_pct;     // +0x18: 0..100% (target brightness)
+    uint32_t led_current_pct;    // +0x1C: 0..100% (live interpolated)
+    uint32_t led_pwm_raw;        // +0x20: 0..1000 (actual TIM1_CCR1)
+    uint32_t led_state;          // +0x24: 0 = OFF, 1 = ON
+    uint32_t led_saved_pct;      // +0x28: Last ON value (1..100%, default 50%)
+    
+    /* Touch sensor and transition */
+    uint32_t touch_raw;          // +0x2C: 1 = touch detected on PB4, 0 = idle
+    uint32_t fade_time_ms;       // +0x30: Transition duration in ms (default 250)
 } LampSharedControl_t;
 
 volatile LampSharedControl_t g_lamp = {
-    .magic              = 0x50574D31,
-    .target_brightness  = 0,
-    .current_brightness = 0,
-    .pwm_raw            = 0,
-    .touch_raw          = 0,
-    .fade_time_ms       = 350,
-    .lamp_state         = 0
+    .magic           = 0x50574D31,
+    .fil_target_pct  = 0,
+    .fil_current_pct = 0,
+    .fil_pwm_raw     = 0,
+    .fil_state       = 0,
+    .fil_saved_pct   = 50,
+
+    .led_target_pct  = 0,
+    .led_current_pct = 0,
+    .led_pwm_raw     = 0,
+    .led_state       = 0,
+    .led_saved_pct   = 50,
+
+    .touch_raw       = 0,
+    .fade_time_ms    = 250
 };
 
 /* Millisecond timebase via SysTick */
@@ -66,7 +86,7 @@ int main(void)
     RCC->IOPENR  |= RCC_IOPENR_GPIOAEN | RCC_IOPENR_GPIOBEN;
     RCC->APBENR2 |= RCC_APBENR2_TIM1EN;
 
-    /* 3. Configure PA0 (Pin 13) as Alternate Function 2 (TIM1_CH1, Indicator LED) */
+    /* 3. Configure PA0 (Pin 13) as Alternate Function 2 (TIM1_CH1, Test Board LED) */
     GPIOA->MODER   &= ~(GPIO_MODER_MODE0);
     GPIOA->MODER   |= (2U << 0);           // Mode 10 = Alternate Function
     GPIOA->AFR[0]  &= ~(0xFU << 0);
@@ -82,7 +102,7 @@ int main(void)
     GPIOB->OSPEEDR |= (3U << 4);          // High Speed
     GPIOB->PUPDR   &= ~(GPIO_PUPDR_PUPD2);
 
-    /* 5. Configure PB3 (Pin 9, Coil Pad 1) as Output Push-Pull HIGH (Safe Idle) */
+    /* 5. Configure PB3 (Pin 9, Coil Pad 1) as Output Push-Pull HIGH (Safe Closed) */
     GPIOB->MODER   &= ~(GPIO_MODER_MODE3);
     GPIOB->MODER   |= (1U << 6);           // Mode 01 = Output
     GPIOB->OTYPER  &= ~(1U << 3);
@@ -100,16 +120,16 @@ int main(void)
     TIM1->PSC = 23;
     TIM1->ARR = 999;
 
-    /* Channel 1 (PA0, Indicator LED): PWM Mode 1 (Active HIGH) */
+    /* Channel 1 (PA0, Board LED): PWM Mode 1 (Active HIGH) */
     TIM1->CCMR1 = (6U << 4) | TIM_CCMR1_OC1PE;
-    TIM1->CCR1  = 100;                    // Soft idle glow on indicator
+    TIM1->CCR1  = 0;                      // 0% -> completely OFF (0V)
 
     /* Channel 3 (PB2, Filaments P-FET): PWM Mode 1 with Preload */
     TIM1->CCMR2 = (6U << 4) | TIM_CCMR2_OC3PE;
-    TIM1->CCR3  = 0;                      // Initial 0% (Completely OFF)
+    TIM1->CCR3  = 0;                      // 0% -> completely OFF (3.3V)
 
     /* Enable Outputs:
-     * - CC1E: Output Channel 1 enabled
+     * - CC1E: Output Channel 1 enabled (Active HIGH)
      * - CC3E: Output Channel 3 enabled
      * - CC3P: Output Channel 3 Polarity inverted (Active LOW for P-FET):
      *         CCR3 = 0    -> Pin HIGH (3.3V) -> P-FET 100% OFF
@@ -124,17 +144,21 @@ int main(void)
     /* 8. 1 ms System Timebase via SysTick */
     SysTick_Config(SystemCoreClock / 1000U);
 
-    /* 9. Initialize GyverLED and GyverButton */
-    gyver_led_t lamp_led;
-    gled_init(&lamp_led, 1000);           // Max PWM = 1000 for TIM1
-    gled_set_gamma(&lamp_led, true);      // Enable Gamma 2.2 perceptual curve
+    /* 9. Initialize GyverLED for both independent channels */
+    gyver_led_t fil_led;
+    gled_init(&fil_led, 1000);            // 0..1000 PWM
+    gled_set_gamma(&fil_led, true);       // Perceptual Gamma 2.2 curve
+
+    gyver_led_t board_led;
+    gled_init(&board_led, 1000);          // 0..1000 PWM
+    gled_set_gamma(&board_led, true);     // Perceptual Gamma 2.2 curve
 
     ubutton_t touch_btn;
     ubutton_init(&touch_btn);
 
-    uint8_t saved_brightness = 180;       // ~70% default reading brightness (0..255)
     int8_t dim_direction = 1;             // +1 = brightening, -1 = dimming
-    uint32_t last_swd_target = 0;
+    uint32_t last_swd_fil_target = 0;
+    uint32_t last_swd_led_target = 0;
 
     /* 10. Main non-blocking event loop */
     while (1)
@@ -145,48 +169,48 @@ int main(void)
         bool is_touched = (GPIOB->IDR & (1U << 4)) != 0;
         g_lamp.touch_raw = is_touched ? 1 : 0;
 
-        /* B. Tick GyverButton state machine */
+        /* B. Tick GyverButton state machine (Controls ONLY Filaments) */
         if (ubutton_tick(&touch_btn, is_touched, now))
         {
-            /* Short click: Toggle Lamp ON / OFF with smooth fade */
+            /* Short click: Toggle Filaments ON / OFF with last-value memory */
             if (ubutton_click(&touch_btn))
             {
-                if (g_lamp.lamp_state)
+                if (g_lamp.fil_state)
                 {
-                    g_lamp.lamp_state = 0;
-                    g_lamp.target_brightness = 0;
-                    gled_fade(&lamp_led, 0, g_lamp.fade_time_ms);
+                    g_lamp.fil_state = 0;
+                    g_lamp.fil_target_pct = 0;
+                    last_swd_fil_target = 0;
+                    gled_fade(&fil_led, 0, g_lamp.fade_time_ms);
                 }
                 else
                 {
-                    g_lamp.lamp_state = 1;
-                    if (saved_brightness < 15) saved_brightness = 150;
-                    g_lamp.target_brightness = saved_brightness;
-                    gled_fade(&lamp_led, saved_brightness, g_lamp.fade_time_ms);
+                    g_lamp.fil_state = 1;
+                    if (g_lamp.fil_saved_pct < 1) g_lamp.fil_saved_pct = 50;
+                    g_lamp.fil_target_pct = g_lamp.fil_saved_pct;
+                    last_swd_fil_target = g_lamp.fil_saved_pct;
+                    uint8_t byte_val = (uint8_t)((g_lamp.fil_saved_pct * 255U) / 100U);
+                    gled_fade(&fil_led, byte_val, g_lamp.fade_time_ms);
                 }
             }
 
-            /* Hold: Smooth dimming step */
+            /* Hold: Smooth dimming of Filaments */
             if (ubutton_step(&touch_btn))
             {
-                if (!g_lamp.lamp_state)
+                if (!g_lamp.fil_state)
                 {
-                    g_lamp.lamp_state = 1;
+                    g_lamp.fil_state = 1;
                 }
 
-                if (dim_direction > 0)
-                {
-                    if (saved_brightness <= 250) saved_brightness += 5;
-                    else saved_brightness = 255;
-                }
-                else
-                {
-                    if (saved_brightness >= 15) saved_brightness -= 5;
-                    else saved_brightness = 10;
-                }
+                int32_t new_pct = (int32_t)g_lamp.fil_saved_pct + (dim_direction * 2);
+                if (new_pct > 100) { new_pct = 100; }
+                if (new_pct < 1)   { new_pct = 1; }
 
-                g_lamp.target_brightness = saved_brightness;
-                gled_fade(&lamp_led, saved_brightness, 25);
+                g_lamp.fil_saved_pct  = (uint32_t)new_pct;
+                g_lamp.fil_target_pct = (uint32_t)new_pct;
+                last_swd_fil_target   = (uint32_t)new_pct;
+
+                uint8_t byte_val = (uint8_t)((g_lamp.fil_saved_pct * 255U) / 100U);
+                gled_fade(&fil_led, byte_val, 30);
             }
 
             /* Release after hold: Reverse dim direction for next time */
@@ -196,33 +220,57 @@ int main(void)
             }
         }
 
-        /* C. Check for SWD commands from PC GUI */
-        if (g_lamp.target_brightness != last_swd_target)
+        /* C. Check for SWD commands for Filaments */
+        if (g_lamp.fil_target_pct != last_swd_fil_target)
         {
-            last_swd_target = g_lamp.target_brightness;
-            if (last_swd_target > 0)
+            last_swd_fil_target = g_lamp.fil_target_pct;
+            if (last_swd_fil_target > 0)
             {
-                g_lamp.lamp_state = 1;
-                saved_brightness = (uint8_t)last_swd_target;
+                g_lamp.fil_state = 1;
+                g_lamp.fil_saved_pct = last_swd_fil_target;
             }
             else
             {
-                g_lamp.lamp_state = 0;
+                g_lamp.fil_state = 0;
             }
-            gled_fade(&lamp_led, (uint8_t)last_swd_target, g_lamp.fade_time_ms);
+            uint8_t byte_val = (uint8_t)((last_swd_fil_target * 255U) / 100U);
+            gled_fade(&fil_led, byte_val, g_lamp.fade_time_ms);
         }
 
-        /* D. Tick GyverLED (non-blocking step) */
-        if (gled_tick(&lamp_led, now))
+        /* D. Check for SWD commands for Board LEDs (Independent Channel) */
+        if (g_lamp.led_target_pct != last_swd_led_target)
         {
-            TIM1->CCR3 = lamp_led.pwm_val; // Update hardware PWM on PB2!
+            last_swd_led_target = g_lamp.led_target_pct;
+            if (last_swd_led_target > 0)
+            {
+                g_lamp.led_state = 1;
+                g_lamp.led_saved_pct = last_swd_led_target;
+            }
+            else
+            {
+                g_lamp.led_state = 0;
+            }
+            uint8_t byte_val = (uint8_t)((last_swd_led_target * 255U) / 100U);
+            gled_fade(&board_led, byte_val, g_lamp.fade_time_ms);
         }
 
-        /* E. Update live telemetry */
-        g_lamp.current_brightness = lamp_led.current;
-        g_lamp.pwm_raw            = lamp_led.pwm_val;
+        /* E. Tick GyverLED for Filaments */
+        if (gled_tick(&fil_led, now))
+        {
+            TIM1->CCR3 = (fil_led.current == 0) ? 0 : fil_led.pwm_val;
+        }
 
-        /* Indicator LED reflects lamp state */
-        TIM1->CCR1 = (g_lamp.lamp_state) ? 500 : 50;
+        /* F. Tick GyverLED for Board LEDs */
+        if (gled_tick(&board_led, now))
+        {
+            TIM1->CCR1 = (board_led.current == 0) ? 0 : board_led.pwm_val;
+        }
+
+        /* G. Update live telemetry */
+        g_lamp.fil_current_pct = (uint32_t)((fil_led.current * 100U + 127U) / 255U);
+        g_lamp.fil_pwm_raw     = TIM1->CCR3;
+
+        g_lamp.led_current_pct = (uint32_t)((board_led.current * 100U + 127U) / 255U);
+        g_lamp.led_pwm_raw     = TIM1->CCR1;
     }
 }
