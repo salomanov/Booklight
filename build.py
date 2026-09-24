@@ -56,6 +56,7 @@ SRC_FILES = [
     os.path.join(CUSTOM_DIR, "book_light.c"),
     os.path.join(CUSTOM_DIR, "gyver_ubutton.c"),
     os.path.join(CUSTOM_DIR, "gyver_rgbmath.c"),
+    os.path.join(CUSTOM_DIR, "gyver_led.c"),
     os.path.join(CUSTOM_DIR, "fh8016_py32.c"),
     os.path.join(CUSTOM_DIR, "py32f002b_it.c"),
     os.path.join(CUSTOM_DIR, "py32f002b_hal_msp.c"),
