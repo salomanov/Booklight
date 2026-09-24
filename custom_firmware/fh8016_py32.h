@@ -1,6 +1,7 @@
 #ifndef FH8016_PY32_H
 #define FH8016_PY32_H
 
+#include "py32f0xx.h"
 #include "py32f002b_hal.h"
 #include <stdint.h>
 #include <stdbool.h>
@@ -30,7 +31,7 @@ typedef struct {
     uint32_t raw_frame;
 } fh8016_t;
 
-// Initialization
+// Initialization (Configures GPIO and TIM14 1-Wire non-blocking engine)
 void fh8016_init(fh8016_t *dev, GPIO_TypeDef *port, uint16_t pin);
 
 // High-level state setting
@@ -44,7 +45,10 @@ void fh8016_set_raw(fh8016_t *dev, uint32_t raw_bits26);
 uint32_t fh8016_encode_frame(uint8_t percent, uint8_t bars, uint8_t icons, 
                              fh8016_color_t hl_left, fh8016_color_t hl_right);
 
-// Transmit current frame over 1-Wire line (call periodically, ~20-50 Hz)
+// Non-blocking trigger to transmit frame over 1-Wire via TIM14 (0% CPU, 0 us delay)
 void fh8016_update(fh8016_t *dev);
+
+// Check if transmission is currently in progress
+bool fh8016_is_busy(void);
 
 #endif // FH8016_PY32_H

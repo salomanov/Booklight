@@ -2,12 +2,13 @@
 /**
  ******************************************************************************
  * @file    main.c
- * @brief   E-Book Reading Lamp - STEP 3 & 4: Independent Channels + GyverLED
+ * @brief   E-Book Reading Lamp - STEP 3, 4 & 5: Non-blocking Channels + FH8016 Display
  *          MCU: PUYA PY32F002Bx5 (ARM Cortex-M0+ @ 24MHz)
  *          Board: CXV0257-V1.3
  * 
  *          Hardware pinout:
  *          - PA0 (Pin 13): TIM1_CH1 (AF2) -> Test Board LED (0..100% PWM, 0% = 100% OFF)
+ *          - PA1 (Pin 14): GPIO Output -> FH8016 1-Wire Display (Non-blocking TIM14, 0% CPU)
  *          - PB2 (Pin 10): TIM1_CH3 (AF3) -> Coil Pad 2 (All 4 Filaments, P-FET CJ3415 up to 4.0A)
  *                          P-Channel FET (Active LOW via CC3P, 1.0 kHz Hardware PWM, 0% CPU)
  *          - PB3 (Pin 9):  Coil Pad 1 (Safe Output HIGH / Closed)
@@ -21,6 +22,7 @@
 #include <stdbool.h>
 #include "gyver_led.h"
 #include "gyver_ubutton.h"
+#include "fh8016_py32.h"
 
 /* Shared memory block for SWD control and telemetry */
 typedef struct {
@@ -43,6 +45,15 @@ typedef struct {
     /* Touch sensor and transition */
     uint32_t touch_raw;          // +0x2C: 1 = touch detected on PB4, 0 = idle
     uint32_t fade_time_ms;       // +0x30: Transition duration in ms (default 250)
+
+    /* FH8016 Display Control (1-Wire PA1, TIM14 non-blocking) */
+    uint32_t disp_power;         // +0x34: 0 = OFF (sleep), 1 = ON
+    uint32_t disp_percent;       // +0x38: 0..100
+    uint32_t disp_bars;          // +0x3C: 0..4
+    uint32_t disp_icons;         // +0x40: 0x02 = lightning
+    uint32_t disp_hl_left;       // +0x44: color enum (0..7)
+    uint32_t disp_hl_right;      // +0x48: color enum (0..7)
+    uint32_t disp_auto_sync;     // +0x4C: 1 = auto-mirror filaments, 0 = manual SWD test
 } LampSharedControl_t;
 
 volatile LampSharedControl_t g_lamp = {
@@ -60,7 +71,15 @@ volatile LampSharedControl_t g_lamp = {
     .led_saved_pct   = 50,
 
     .touch_raw       = 0,
-    .fade_time_ms    = 250
+    .fade_time_ms    = 250,
+
+    .disp_power      = 1,
+    .disp_percent    = 50,
+    .disp_bars       = 2,
+    .disp_icons      = 0,
+    .disp_hl_left    = FH8016_COLOR_GREEN,
+    .disp_hl_right   = FH8016_COLOR_GREEN,
+    .disp_auto_sync  = 1
 };
 
 /* Millisecond timebase via SysTick */
@@ -82,9 +101,9 @@ int main(void)
     RCC->APBENR1 |= RCC_APBENR1_DBGEN;
     DBGMCU->CR |= DBGMCU_CR_DBG_STOP;
 
-    /* 2. Enable Clocks: GPIOA, GPIOB, and TIM1 */
+    /* 2. Enable Clocks: GPIOA, GPIOB, TIM1, TIM14 */
     RCC->IOPENR  |= RCC_IOPENR_GPIOAEN | RCC_IOPENR_GPIOBEN;
-    RCC->APBENR2 |= RCC_APBENR2_TIM1EN;
+    RCC->APBENR2 |= RCC_APBENR2_TIM1EN | RCC_APBENR2_TIM14EN;
 
     /* 3. Configure PA0 (Pin 13) as Alternate Function 2 (TIM1_CH1, Test Board LED) */
     GPIOA->MODER   &= ~(GPIO_MODER_MODE0);
@@ -113,10 +132,7 @@ int main(void)
     GPIOB->PUPDR   &= ~(GPIO_PUPDR_PUPD4);
     GPIOB->PUPDR   |= (GPIO_PUPDR_PUPD4_1);// 10 = Pull-Down
 
-    /* 7. Configure TIM1 for 1.0 kHz Hardware PWM
-     *    Timer Clock: 24 MHz / (23 + 1) = 1.0 MHz
-     *    PWM Period:  1.0 MHz / (999 + 1) = 1000 Hz (1.0 kHz)
-     */
+    /* 7. Configure TIM1 for 1.0 kHz Hardware PWM */
     TIM1->PSC = 23;
     TIM1->ARR = 999;
 
@@ -128,23 +144,18 @@ int main(void)
     TIM1->CCMR2 = (6U << 4) | TIM_CCMR2_OC3PE;
     TIM1->CCR3  = 0;                      // 0% -> completely OFF (3.3V)
 
-    /* Enable Outputs:
-     * - CC1E: Output Channel 1 enabled (Active HIGH)
-     * - CC3E: Output Channel 3 enabled
-     * - CC3P: Output Channel 3 Polarity inverted (Active LOW for P-FET):
-     *         CCR3 = 0    -> Pin HIGH (3.3V) -> P-FET 100% OFF
-     *         CCR3 = 1000 -> Pin LOW (0V)   -> P-FET 100% ON
-     */
     TIM1->CCER = TIM_CCER_CC1E | TIM_CCER_CC3E | TIM_CCER_CC3P;
-
-    /* Master Output Enable & Counter Start */
     TIM1->BDTR = TIM_BDTR_MOE;
     TIM1->CR1  = TIM_CR1_CEN;
 
-    /* 8. 1 ms System Timebase via SysTick */
+    /* 8. Configure FH8016 1-Wire Display on PA1 (Pin 14 / Pad DAT) with TIM14 non-blocking engine */
+    fh8016_t disp;
+    fh8016_init(&disp, GPIOA, GPIO_PIN_1);
+
+    /* 9. 1 ms System Timebase via SysTick */
     SysTick_Config(SystemCoreClock / 1000U);
 
-    /* 9. Initialize GyverLED for both independent channels */
+    /* 10. Initialize GyverLED for both independent channels */
     gyver_led_t fil_led;
     gled_init(&fil_led, 1000);            // 0..1000 PWM
     gled_set_gamma(&fil_led, true);       // Perceptual Gamma 2.2 curve
@@ -159,8 +170,9 @@ int main(void)
     int8_t dim_direction = 1;             // +1 = brightening, -1 = dimming
     uint32_t last_swd_fil_target = 0;
     uint32_t last_swd_led_target = 0;
+    uint32_t last_disp_ms = 0;
 
-    /* 10. Main non-blocking event loop */
+    /* 11. Main non-blocking event loop */
     while (1)
     {
         uint32_t now = millis();
@@ -237,7 +249,7 @@ int main(void)
             gled_fade(&fil_led, byte_val, g_lamp.fade_time_ms);
         }
 
-        /* D. Check for SWD commands for Board LEDs (Independent Channel) */
+        /* D. Check for SWD commands for Board LEDs */
         if (g_lamp.led_target_pct != last_swd_led_target)
         {
             last_swd_led_target = g_lamp.led_target_pct;
@@ -272,5 +284,57 @@ int main(void)
 
         g_lamp.led_current_pct = (uint32_t)((board_led.current * 100U + 127U) / 255U);
         g_lamp.led_pwm_raw     = TIM1->CCR1;
+
+        /* H. FH8016 Display update (Every 40 ms / 25 Hz, 100% non-blocking via TIM14) */
+        if (now - last_disp_ms >= 40)
+        {
+            last_disp_ms = now;
+
+            if (g_lamp.disp_auto_sync)
+            {
+                /* Auto-sync mode: Display reflects filament state */
+                if (g_lamp.fil_state || g_lamp.fil_current_pct > 0)
+                {
+                    uint8_t cur = (uint8_t)g_lamp.fil_current_pct;
+                    uint8_t bars = (cur >= 80) ? 4 : (cur >= 60) ? 3 : (cur >= 40) ? 2 : (cur >= 20) ? 1 : 0;
+                    fh8016_color_t color = (cur >= 60) ? FH8016_COLOR_GREEN : (cur >= 25) ? FH8016_COLOR_YELLOW : FH8016_COLOR_RED;
+                    
+                    g_lamp.disp_power = 1;
+                    g_lamp.disp_percent = cur;
+                    g_lamp.disp_bars = bars;
+                    g_lamp.disp_icons = 0;
+                    g_lamp.disp_hl_left = color;
+                    g_lamp.disp_hl_right = color;
+
+                    fh8016_set_state(&disp, cur, bars, 0, color, color);
+                }
+                else
+                {
+                    /* Lamp is OFF -> display sleep */
+                    g_lamp.disp_power = 0;
+                    fh8016_set_raw(&disp, 0);
+                }
+            }
+            else
+            {
+                /* Manual SWD test mode: PC GUI has full direct control */
+                if (g_lamp.disp_power)
+                {
+                    fh8016_set_state(&disp, 
+                                     (uint8_t)g_lamp.disp_percent, 
+                                     (uint8_t)g_lamp.disp_bars, 
+                                     (uint8_t)g_lamp.disp_icons,
+                                     (fh8016_color_t)g_lamp.disp_hl_left, 
+                                     (fh8016_color_t)g_lamp.disp_hl_right);
+                }
+                else
+                {
+                    fh8016_set_raw(&disp, 0);
+                }
+            }
+
+            /* Trigger non-blocking 1-Wire transmission in TIM14 hardware interrupt */
+            fh8016_update(&disp);
+        }
     }
 }
