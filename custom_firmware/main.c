@@ -21,28 +21,31 @@ int main(void)
     RCC->APBENR1 |= RCC_APBENR1_DBGEN;
     DBGMCU->CR |= DBGMCU_CR_DBG_STOP;
 
-    /* 2. Enable GPIOA clock */
-    RCC->IOPENR |= RCC_IOPENR_GPIOAEN;
+    /* 2. Enable GPIOA and GPIOB clocks */
+    RCC->IOPENR |= RCC_IOPENR_GPIOAEN | RCC_IOPENR_GPIOBEN;
 
-    /* 3. Configure PA0 (Pin 13) and PA5 (Pin 18) as Output Push-Pull */
-    /* PA0: MODER[1:0] = 01 (General purpose output) */
+    /* 3. Configure PA0 (Pin 13) as Output Push-Pull (Indicator LED) */
     GPIOA->MODER &= ~(GPIO_MODER_MODE0);
     GPIOA->MODER |= (GPIO_MODER_MODE0_0);
     GPIOA->OTYPER &= ~(1U << 0);
     GPIOA->OSPEEDR |= (3U << 0);
     GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPD0);
 
-    /* PA5: MODER[11:10] = 01 (General purpose output) */
-    GPIOA->MODER &= ~(GPIO_MODER_MODE5);
-    GPIOA->MODER |= (GPIO_MODER_MODE5_0);
-    GPIOA->OTYPER &= ~(1U << 5);
-    GPIOA->OSPEEDR |= (3U << (5 * 2));
-    GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPD5);
+    /* 4. Configure PB2 (Pin 10, Coil 2) and PB3 (Pin 9, Coil 1) as Output Push-Pull */
+    GPIOB->MODER &= ~(GPIO_MODER_MODE2 | GPIO_MODER_MODE3);
+    GPIOB->MODER |= (GPIO_MODER_MODE2_0 | GPIO_MODER_MODE3_0);
+    GPIOB->OTYPER &= ~((1U << 2) | (1U << 3));
+    GPIOB->OSPEEDR |= ((3U << (2 * 2)) | (3U << (3 * 2)));
+    GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPD2 | GPIO_PUPDR_PUPD3);
 
-    /* 4. Turn PA0 and PA5 HIGH (LED filament turns ON permanently) */
-    GPIOA->BSRR = GPIO_BSRR_BS0 | GPIO_BSRR_BS5;
+    /* 5. Initial state:
+     * - PA0 = HIGH (Indicator LED on)
+     * - PB2, PB3 = HIGH (P-FET closed if direct gate, safe idle)
+     */
+    GPIOA->BSRR = GPIO_BSRR_BS0;
+    GPIOB->BSRR = GPIO_BSRR_BS2 | GPIO_BSRR_BS3;
 
-    /* 5. Main loop - controller stays awake, SWD is 100% accessible 24/7 */
+    /* 6. Main loop - controller stays awake, SWD is 100% accessible 24/7 */
     while (1)
     {
         __NOP();
