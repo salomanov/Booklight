@@ -35,6 +35,13 @@ ADDR_DISP_HL_LEFT      = ADDR_LAMP_BASE + 0x44  # color enum 0..7
 ADDR_DISP_HL_RIGHT     = ADDR_LAMP_BASE + 0x48  # color enum 0..7
 ADDR_DISP_AUTO_SYNC    = ADDR_LAMP_BASE + 0x4C  # 1 = auto, 0 = manual
 
+# Step 6: Battery & Charging Telemetry (Internal VREFINT + C60H PB5)
+ADDR_BAT_MILLIVOLTS    = ADDR_LAMP_BASE + 0x50  # mV (e.g. 3300 or 4150)
+ADDR_BAT_PERCENT       = ADDR_LAMP_BASE + 0x54  # 0..100%
+ADDR_BAT_ADC_RAW       = ADDR_LAMP_BASE + 0x58  # 12-bit ADC raw code
+ADDR_CHRG_PIN_RAW      = ADDR_LAMP_BASE + 0x5C  # 0 = LOW (charging), 1 = HIGH (idle)
+ADDR_IS_CHARGING       = ADDR_LAMP_BASE + 0x60  # 1 = charging, 0 = battery
+
 TARGET = 'py32f002bx5'
 
 COLOR_NAMES = ["Выкл", "Красный", "Зелёный", "Синий", "Циан", "Маджента", "Жёлтый", "Белый"]
@@ -78,7 +85,7 @@ class SwdWorker(QThread):
                     session.open()
                     target = session.target
                     connected = True
-                    self.connection_changed.emit(True, "J-Link STLink: Подключено (TIM1 ШИМ + TIM14 Неблокирующий FH8016)")
+                    self.connection_changed.emit(True, "J-Link STLink: Подключено (TIM1 ШИМ + TIM14 Дисплей + АЦП Батареи)")
 
                 # Execute pending write commands to SRAM
                 while self.command_queue:
@@ -101,8 +108,8 @@ class SwdWorker(QThread):
                     elif cmd == 'DISP_AUTO':
                         target.write32(ADDR_DISP_AUTO_SYNC, val)
 
-                # Read telemetry block (20 x 32-bit words)
-                data = target.read_memory_block32(ADDR_LAMP_BASE, 20)
+                # Read telemetry block (25 x 32-bit words = 100 bytes)
+                data = target.read_memory_block32(ADDR_LAMP_BASE, 25)
                 if data[0] == 0x50574D31:
                     telem = {
                         'fil_target': data[1],
@@ -124,6 +131,11 @@ class SwdWorker(QThread):
                         'disp_hl_l':  data[17],
                         'disp_hl_r':  data[18],
                         'disp_auto':  data[19],
+                        'bat_mv':     data[20],
+                        'bat_pct':    data[21],
+                        'bat_adc':    data[22],
+                        'chrg_pin':   data[23],
+                        'is_charging':data[24],
                     }
                     self.telemetry_updated.emit(telem)
 
@@ -152,8 +164,8 @@ class SwdWorker(QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("BookLight — Неблокирующий Дисплей FH8016 (TIM14) + ШИМ 4 Филаментов")
-        self.setFixedSize(780, 880)
+        self.setWindowTitle("BookLight — Филаменты + Светодиоды + Дисплей FH8016 + АКБ и C60H")
+        self.setFixedSize(780, 990)
 
         self.fil_dragging = False
         self.led_dragging = False
@@ -462,6 +474,55 @@ class MainWindow(QMainWindow):
 
         root.addWidget(led_card)
 
+        # ─── 6. Card: Battery & C60H Charging (Internal ADC VREFINT + PB5) ───
+        bat_card = QFrame()
+        bat_card.setProperty("class", "card")
+        bat_layout = QVBoxLayout(bat_card)
+        bat_layout.setSpacing(8)
+
+        bat_header = QHBoxLayout()
+        bat_title = QLabel("🔋 АККУМУЛЯТОР И ЗАРЯДКА (АЦП Bandgap 1.20В + C60H на PB5)")
+        bat_title.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        bat_title.setStyleSheet("color: #00d2d3;")
+        self.bat_badge = QLabel("ОЖИДАНИЕ ДАННЫХ")
+        self.bat_badge.setStyleSheet("background-color: #242933; color: #8892B0; padding: 3px 10px; border-radius: 5px; font-weight: bold;")
+        bat_header.addWidget(bat_title)
+        bat_header.addStretch()
+        bat_header.addWidget(self.bat_badge)
+        bat_layout.addLayout(bat_header)
+
+        bat_info_row = QHBoxLayout()
+        self.lbl_bat_voltage = QLabel("0.00 В")
+        self.lbl_bat_voltage.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+        self.lbl_bat_voltage.setStyleSheet("color: #00d2d3;")
+
+        self.lbl_bat_details = QLabel("АЦП raw: 0 | Пин PB5 (C60H CHRG): HIGH")
+        self.lbl_bat_details.setFont(QFont("Segoe UI", 10))
+        self.lbl_bat_details.setStyleSheet("color: #8892B0;")
+
+        bat_info_row.addWidget(self.lbl_bat_voltage)
+        bat_info_row.addSpacing(15)
+        bat_info_row.addWidget(self.lbl_bat_details, 1)
+        bat_layout.addLayout(bat_info_row)
+
+        self.prog_bat = QProgressBar()
+        self.prog_bat.setStyleSheet("""
+            QProgressBar::chunk { 
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e74c3c, stop:0.3 #f39c12, stop:0.7 #2ecc71, stop:1 #00d2d3); 
+                border-radius: 5px; 
+            }
+        """)
+        self.prog_bat.setRange(0, 100)
+        self.prog_bat.setValue(0)
+        self.prog_bat.setFormat("Заряд АКБ: %v%")
+        bat_layout.addWidget(self.prog_bat)
+
+        bat_note = QLabel("ℹ️ При питании от программатора (3.3V) АЦП показывает ~3.30V. Для проверки реального АКБ и Type-C отключите линию 3.3V.")
+        bat_note.setStyleSheet("color: #57606f; font-size: 10px;")
+        bat_layout.addWidget(bat_note)
+
+        root.addWidget(bat_card)
+
     def on_connection_changed(self, connected, message):
         if connected:
             self.status_dot.setStyleSheet("color: #2ecc71;")
@@ -613,6 +674,35 @@ class MainWindow(QMainWindow):
             self.led_badge.setStyleSheet("background-color: #27ae60; color: white; padding: 3px 10px; border-radius: 5px; font-weight: bold;")
             self.btn_led_toggle.setText("ВЫКЛ (0%)")
             self.btn_led_toggle.setStyleSheet("background-color: #c0392b; color: white; padding: 8px 14px;")
+
+        # Update Battery & Charge UI
+        bat_mv = telem.get('bat_mv', 0)
+        bat_pct = telem.get('bat_pct', 0)
+        bat_adc = telem.get('bat_adc', 0)
+        chrg_pin = telem.get('chrg_pin', 1)
+        is_charging = telem.get('is_charging', 0)
+
+        v_float = bat_mv / 1000.0
+        self.lbl_bat_voltage.setText(f"{v_float:.2f} В ({bat_mv} мВ)")
+        self.prog_bat.setValue(min(100, max(0, bat_pct)))
+        self.prog_bat.setFormat(f"Заряд: {bat_pct}% ({v_float:.2f} В)")
+
+        pin_str = "0V (LOW / ЗАРЯДКА)" if chrg_pin == 0 else "3.3V (HIGH / РАЗРЯД)"
+        self.lbl_bat_details.setText(f"АЦП raw: {bat_adc} | Пин PB5 (C60H CHRG): {pin_str}")
+
+        if is_charging or chrg_pin == 0:
+            self.bat_badge.setText("⚡ ИДЕТ ЗАРЯДКА Type-C")
+            self.bat_badge.setStyleSheet("background-color: #0984e3; color: white; padding: 3px 10px; border-radius: 5px; font-weight: bold;")
+        else:
+            if bat_pct > 20:
+                self.bat_badge.setText(f"🔋 РАБОТА ОТ АКБ ({bat_pct}%)")
+                self.bat_badge.setStyleSheet("background-color: #27ae60; color: white; padding: 3px 10px; border-radius: 5px; font-weight: bold;")
+            elif bat_pct > 0:
+                self.bat_badge.setText(f"⚠️ АКБ РАЗРЯЖЕН ({bat_pct}%)")
+                self.bat_badge.setStyleSheet("background-color: #d63031; color: white; padding: 3px 10px; border-radius: 5px; font-weight: bold;")
+            else:
+                self.bat_badge.setText("ОЖИДАНИЕ ДАННЫХ")
+                self.bat_badge.setStyleSheet("background-color: #242933; color: #8892B0; padding: 3px 10px; border-radius: 5px; font-weight: bold;")
 
     def closeEvent(self, event):
         self.worker.stop()

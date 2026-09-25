@@ -2,7 +2,7 @@
 /**
  ******************************************************************************
  * @file    main.c
- * @brief   E-Book Reading Lamp - STEP 3, 4 & 5: Non-blocking Channels + FH8016 Display
+ * @brief   E-Book Reading Lamp - STEP 3..6: Filaments + LEDs + Display + Battery ADC & Charge
  *          MCU: PUYA PY32F002Bx5 (ARM Cortex-M0+ @ 24MHz)
  *          Board: CXV0257-V1.3
  * 
@@ -13,11 +13,15 @@
  *                          P-Channel FET (Active LOW via CC3P, 1.0 kHz Hardware PWM, 0% CPU)
  *          - PB3 (Pin 9):  Coil Pad 1 (Safe Output HIGH / Closed)
  *          - PB4 (Pin 8):  Touch Sensor (Pad M+ / TTP223) -> Input Pull-down
+ *          - PB5 (Pin 7):  C60H Charge Status (CHRG Pin 1) -> Input Pull-up (0 = Charging)
+ *          - ADC Internal: ADC_CHANNEL_VREFINT (Bandgap 1.20V) -> VDD/Battery Measurement
  *          - SWD Debug:    DBGMCU enabled, CoreSight debug active 24/7
  ******************************************************************************
  */
 
 #include "py32f0xx.h"
+#include "py32f002b_hal.h"
+#include "py32f002b_hal_adc.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include "gyver_led.h"
@@ -53,7 +57,14 @@ typedef struct {
     uint32_t disp_icons;         // +0x40: 0x02 = lightning
     uint32_t disp_hl_left;       // +0x44: color enum (0..7)
     uint32_t disp_hl_right;      // +0x48: color enum (0..7)
-    uint32_t disp_auto_sync;     // +0x4C: 1 = auto-mirror filaments, 0 = manual SWD test
+    uint32_t disp_auto_sync;     // +0x4C: 1 = auto, 0 = manual SWD test
+
+    /* Battery & Charge Telemetry (Step 6) */
+    uint32_t bat_millivolts;     // +0x50: mV (e.g. 3300 or 4150)
+    uint32_t bat_percent;        // +0x54: 0..100%
+    uint32_t bat_adc_raw;        // +0x58: raw ADC 12-bit code (0..4095)
+    uint32_t chrg_pin_raw;       // +0x5C: 0 = LOW (charging active), 1 = HIGH (idle)
+    uint32_t is_charging;        // +0x60: 1 = charging, 0 = battery power
 } LampSharedControl_t;
 
 volatile LampSharedControl_t g_lamp = {
@@ -79,7 +90,13 @@ volatile LampSharedControl_t g_lamp = {
     .disp_icons      = 0,
     .disp_hl_left    = FH8016_COLOR_GREEN,
     .disp_hl_right   = FH8016_COLOR_GREEN,
-    .disp_auto_sync  = 1
+    .disp_auto_sync  = 1,
+
+    .bat_millivolts  = 3300,
+    .bat_percent     = 1,
+    .bat_adc_raw     = 1489,
+    .chrg_pin_raw    = 1,
+    .is_charging     = 0
 };
 
 /* Millisecond timebase via SysTick */
@@ -95,13 +112,96 @@ uint32_t millis(void)
     return s_millis;
 }
 
+/* ADC Handle for Battery Measurement */
+static ADC_HandleTypeDef s_hadc;
+
+static void adc_init(void)
+{
+    __HAL_RCC_ADC_CLK_ENABLE();
+
+    s_hadc.Instance = ADC1;
+    s_hadc.Init.ClockPrescaler        = ADC_CLOCK_SYNC_PCLK_DIV32;
+    s_hadc.Init.Resolution            = ADC_RESOLUTION_12B;
+    s_hadc.Init.DataAlign             = ADC_DATAALIGN_RIGHT;
+    s_hadc.Init.ScanConvMode          = ADC_SCAN_DIRECTION_FORWARD;
+    s_hadc.Init.EOCSelection          = ADC_EOC_SINGLE_CONV;
+    s_hadc.Init.LowPowerAutoWait      = DISABLE;
+    s_hadc.Init.ContinuousConvMode    = DISABLE;
+    s_hadc.Init.DiscontinuousConvMode = DISABLE;
+    s_hadc.Init.ExternalTrigConv      = ADC_SOFTWARE_START;
+    s_hadc.Init.ExternalTrigConvEdge  = ADC_EXTERNALTRIGCONVEDGE_NONE;
+    s_hadc.Init.Overrun               = ADC_OVR_DATA_OVERWRITTEN;
+    s_hadc.Init.SamplingTimeCommon    = ADC_SAMPLETIME_41CYCLES_5;
+    HAL_ADC_Init(&s_hadc);
+
+    ADC_ChannelConfTypeDef sConfig = {0};
+    sConfig.Rank    = ADC_RANK_CHANNEL_NUMBER;
+    sConfig.Channel = ADC_CHANNEL_VREFINT;
+    HAL_ADC_ConfigChannel(&s_hadc, &sConfig);
+
+    HAL_ADC_ConfigVrefBuf(&s_hadc, ADC_VREFBUF_VCCA);
+    SET_BIT(ADC->CCR, ADC_CCR_VREFEN);
+    HAL_ADCEx_Calibration_Start(&s_hadc);
+}
+
+static uint8_t calc_bat_percent(uint16_t mv)
+{
+    if (mv >= 4150) return 100;
+    if (mv >= 4050) return 90 + (uint8_t)(((mv - 4050) * 10) / 100);
+    if (mv >= 3950) return 80 + (uint8_t)(((mv - 3950) * 10) / 100);
+    if (mv >= 3850) return 65 + (uint8_t)(((mv - 3850) * 15) / 100);
+    if (mv >= 3780) return 50 + (uint8_t)(((mv - 3780) * 15) / 70);
+    if (mv >= 3700) return 35 + (uint8_t)(((mv - 3700) * 15) / 80);
+    if (mv >= 3600) return 20 + (uint8_t)(((mv - 3600) * 15) / 100);
+    if (mv >= 3450) return 10 + (uint8_t)(((mv - 3450) * 10) / 150);
+    if (mv >= 3300) return 1  + (uint8_t)(((mv - 3300) * 9)  / 150);
+    return 0;
+}
+
+static uint16_t s_filtered_mv = 3300;
+
+static void sample_battery_and_charge(void)
+{
+    /* 1. Read C60H charge controller status pin (PB5, Pin 7) */
+    bool pin_low = (GPIOB->IDR & (1U << 5)) == 0;
+    g_lamp.chrg_pin_raw = pin_low ? 0 : 1;
+
+    /* 2. Sample 12-bit ADC on 1.20V Bandgap reference */
+    HAL_ADC_Start(&s_hadc);
+    if (HAL_ADC_PollForConversion(&s_hadc, 5) == HAL_OK)
+    {
+        uint32_t raw = HAL_ADC_GetValue(&s_hadc);
+        g_lamp.bat_adc_raw = raw;
+        if (raw > 500 && raw < 4095)
+        {
+            uint32_t inst_mv = (4095UL * 1200UL) / raw;
+            /* Smooth exponential filter: 7/8 previous + 1/8 new */
+            s_filtered_mv = (uint16_t)(((uint32_t)s_filtered_mv * 7 + inst_mv) / 8);
+        }
+    }
+    g_lamp.bat_millivolts = s_filtered_mv;
+    g_lamp.bat_percent = calc_bat_percent(s_filtered_mv);
+
+    /* 3. Determine overall charging status:
+     * Active if C60H pulls PB5 LOW, OR if battery voltage spikes above 4.18V
+     */
+    if (pin_low || s_filtered_mv >= 4180)
+    {
+        g_lamp.is_charging = 1;
+    }
+    else
+    {
+        g_lamp.is_charging = 0;
+    }
+}
+
 int main(void)
 {
     /* 1. Enable DBGMCU peripheral clock and keep SWD debug port active in STOP mode */
     RCC->APBENR1 |= RCC_APBENR1_DBGEN;
     DBGMCU->CR |= DBGMCU_CR_DBG_STOP;
 
-    /* 2. Enable Clocks: GPIOA, GPIOB, TIM1, TIM14 */
+    /* 2. Enable Clocks: GPIOA, GPIOB, TIM1, TIM14, ADC */
     RCC->IOPENR  |= RCC_IOPENR_GPIOAEN | RCC_IOPENR_GPIOBEN;
     RCC->APBENR2 |= RCC_APBENR2_TIM1EN | RCC_APBENR2_TIM14EN;
 
@@ -132,7 +232,12 @@ int main(void)
     GPIOB->PUPDR   &= ~(GPIO_PUPDR_PUPD4);
     GPIOB->PUPDR   |= (GPIO_PUPDR_PUPD4_1);// 10 = Pull-Down
 
-    /* 7. Configure TIM1 for 1.0 kHz Hardware PWM */
+    /* 7. Configure PB5 (Pin 7, C60H Charge Status Pin) as Input with Pull-Up */
+    GPIOB->MODER   &= ~(GPIO_MODER_MODE5); // Mode 00 = Input
+    GPIOB->PUPDR   &= ~(GPIO_PUPDR_PUPD5);
+    GPIOB->PUPDR   |= (1U << 10);          // 01 = Pull-Up
+
+    /* 8. Configure TIM1 for 1.0 kHz Hardware PWM */
     TIM1->PSC = 23;
     TIM1->ARR = 999;
 
@@ -148,14 +253,17 @@ int main(void)
     TIM1->BDTR = TIM_BDTR_MOE;
     TIM1->CR1  = TIM_CR1_CEN;
 
-    /* 8. Configure FH8016 1-Wire Display on PA1 (Pin 14 / Pad DAT) with TIM14 non-blocking engine */
+    /* 9. Configure FH8016 1-Wire Display on PA1 (Pin 14 / Pad DAT) with TIM14 non-blocking engine */
     fh8016_t disp;
     fh8016_init(&disp, GPIOA, GPIO_PIN_1);
 
-    /* 9. 1 ms System Timebase via SysTick */
+    /* 10. Initialize 12-bit ADC on 1.20V Bandgap reference */
+    adc_init();
+
+    /* 11. 1 ms System Timebase via SysTick */
     SysTick_Config(SystemCoreClock / 1000U);
 
-    /* 10. Initialize GyverLED for both independent channels */
+    /* 12. Initialize GyverLED for both independent channels */
     gyver_led_t fil_led;
     gled_init(&fil_led, 1000);            // 0..1000 PWM
     gled_set_gamma(&fil_led, true);       // Perceptual Gamma 2.2 curve
@@ -171,8 +279,12 @@ int main(void)
     uint32_t last_swd_fil_target = 0;
     uint32_t last_swd_led_target = 0;
     uint32_t last_disp_ms = 0;
+    uint32_t last_bat_ms = 0;
 
-    /* 11. Main non-blocking event loop */
+    /* Initial sample */
+    sample_battery_and_charge();
+
+    /* 13. Main non-blocking event loop */
     while (1)
     {
         uint32_t now = millis();
@@ -285,39 +397,62 @@ int main(void)
         g_lamp.led_current_pct = (uint32_t)((board_led.current * 100U + 127U) / 255U);
         g_lamp.led_pwm_raw     = TIM1->CCR1;
 
-        /* H. FH8016 Display update (Every 40 ms / 25 Hz, 100% non-blocking via TIM14) */
+        /* H. Sample Battery & Charge Status every 300 ms */
+        if (now - last_bat_ms >= 300)
+        {
+            last_bat_ms = now;
+            sample_battery_and_charge();
+        }
+
+        /* I. FH8016 Display update (Every 40 ms / 25 Hz, 100% non-blocking via TIM14) */
         if (now - last_disp_ms >= 40)
         {
             last_disp_ms = now;
 
             if (g_lamp.disp_auto_sync)
             {
-                /* Auto-sync mode: Display reflects filament state */
-                if (g_lamp.fil_state || g_lamp.fil_current_pct > 0)
+                /* Auto-sync mode */
+                if (g_lamp.is_charging)
                 {
+                    /* CHARGING MODE: Running snake animation, lightning ON, Cyan headlights */
+                    uint8_t anim_step = (uint8_t)((now / 350U) % 5U);
+                    g_lamp.disp_power    = 1;
+                    g_lamp.disp_percent  = g_lamp.bat_percent;
+                    g_lamp.disp_bars     = (anim_step == 0) ? 1 : anim_step;
+                    g_lamp.disp_icons    = FH8016_ICON_LIGHTNING;
+                    g_lamp.disp_hl_left  = FH8016_COLOR_CYAN;
+                    g_lamp.disp_hl_right = FH8016_COLOR_CYAN;
+
+                    fh8016_set_state(&disp, g_lamp.bat_percent, g_lamp.disp_bars, 
+                                     FH8016_ICON_LIGHTNING, FH8016_COLOR_CYAN, FH8016_COLOR_CYAN);
+                }
+                else if (g_lamp.fil_state || g_lamp.fil_current_pct > 0)
+                {
+                    /* LAMP IS ACTIVE: Display shows filament brightness percentage */
                     uint8_t cur = (uint8_t)g_lamp.fil_current_pct;
                     uint8_t bars = (cur >= 80) ? 4 : (cur >= 60) ? 3 : (cur >= 40) ? 2 : (cur >= 20) ? 1 : 0;
-                    fh8016_color_t color = (cur >= 60) ? FH8016_COLOR_GREEN : (cur >= 25) ? FH8016_COLOR_YELLOW : FH8016_COLOR_RED;
+                    fh8016_color_t color = (g_lamp.bat_percent >= 60) ? FH8016_COLOR_GREEN : 
+                                           (g_lamp.bat_percent >= 25) ? FH8016_COLOR_YELLOW : FH8016_COLOR_RED;
                     
-                    g_lamp.disp_power = 1;
-                    g_lamp.disp_percent = cur;
-                    g_lamp.disp_bars = bars;
-                    g_lamp.disp_icons = 0;
-                    g_lamp.disp_hl_left = color;
+                    g_lamp.disp_power    = 1;
+                    g_lamp.disp_percent  = cur;
+                    g_lamp.disp_bars     = bars;
+                    g_lamp.disp_icons    = 0;
+                    g_lamp.disp_hl_left  = color;
                     g_lamp.disp_hl_right = color;
 
                     fh8016_set_state(&disp, cur, bars, 0, color, color);
                 }
                 else
                 {
-                    /* Lamp is OFF -> display sleep */
+                    /* Lamp is OFF and not charging -> display sleep */
                     g_lamp.disp_power = 0;
                     fh8016_set_raw(&disp, 0);
                 }
             }
             else
             {
-                /* Manual SWD test mode: PC GUI has full direct control */
+                /* Manual SWD test mode: PC GUI has direct control */
                 if (g_lamp.disp_power)
                 {
                     fh8016_set_state(&disp, 
