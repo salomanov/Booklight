@@ -165,7 +165,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("BookLight — Филаменты + Светодиоды + Дисплей FH8016 + АКБ и C60H")
-        self.setFixedSize(780, 990)
+        self.setFixedSize(780, 1020)
 
         self.fil_dragging = False
         self.led_dragging = False
@@ -175,6 +175,12 @@ class MainWindow(QMainWindow):
         self.mem_led_saved = 50
         self.cur_fil_state = 0
         self.cur_led_state = 0
+
+        # Touch sensor diagnostics
+        self.touch_press_start = 0.0
+        self.last_touch_raw = 0
+        self.touch_clicks_count = 0
+        self.last_release_time = 0.0
 
         self.worker = SwdWorker()
         self.worker.connection_changed.connect(self.on_connection_changed)
@@ -251,30 +257,67 @@ class MainWindow(QMainWindow):
         status_layout.addWidget(self.status_text, 1)
         root.addWidget(status_card)
 
-        # ─── 2. Touch Sensor Banner ───
+        # ─── 2. Touch Sensor Diagnostic Card ───
         touch_card = QFrame()
         touch_card.setProperty("class", "card")
-        touch_layout = QHBoxLayout(touch_card)
+        touch_layout = QVBoxLayout(touch_card)
         touch_layout.setContentsMargins(12, 8, 12, 8)
+        touch_layout.setSpacing(6)
 
+        touch_header = QHBoxLayout()
         touch_icon = QLabel("👆")
-        touch_icon.setFont(QFont("Segoe UI", 16))
+        touch_icon.setFont(QFont("Segoe UI", 14))
 
-        touch_box = QVBoxLayout()
-        touch_title = QLabel("СЕНСОР КАСАНИЯ (TTP223 на PB4 / Pad M+)")
+        touch_title_box = QVBoxLayout()
+        touch_title = QLabel("ТЕСТ И ДИАГНОСТИКА СЕНСОРА TTP223 (Пин 8 / PB4 / Pad M+)")
         touch_title.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-        touch_sub = QLabel("Тап = Вкл/Выкл филаментов с памятью | Удержание = диммирование")
-        touch_sub.setStyleSheet("color: #8892B0; font-size: 10px;")
-        touch_box.addWidget(touch_title)
-        touch_box.addWidget(touch_sub)
+        touch_title.setStyleSheet("color: #a29bfe;")
+        self.touch_sub = QLabel("Определяет: Клик (<350мс), Удержание (>400мс), Долгое удержание (>1.2с)")
+        self.touch_sub.setStyleSheet("color: #8892B0; font-size: 10px;")
+        touch_title_box.addWidget(touch_title)
+        touch_title_box.addWidget(self.touch_sub)
 
         self.touch_badge = QLabel("ОЖИДАНИЕ")
         self.touch_badge.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
         self.touch_badge.setStyleSheet("background-color: #242933; color: #8892B0; padding: 4px 12px; border-radius: 6px;")
 
-        touch_layout.addWidget(touch_icon)
-        touch_layout.addLayout(touch_box, 1)
-        touch_layout.addWidget(self.touch_badge)
+        touch_header.addWidget(touch_icon)
+        touch_header.addLayout(touch_title_box, 1)
+        touch_header.addWidget(self.touch_badge)
+        touch_layout.addLayout(touch_header)
+
+        # Progress bar showing hold duration
+        self.prog_touch = QProgressBar()
+        self.prog_touch.setStyleSheet("""
+            QProgressBar::chunk { 
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00cec9, stop:0.3 #0984e3, stop:0.7 #fdcb6e, stop:1 #e17055); 
+                border-radius: 4px; 
+            }
+        """)
+        self.prog_touch.setRange(0, 1500)
+        self.prog_touch.setValue(0)
+        self.prog_touch.setTextVisible(False)
+        self.prog_touch.setFixedHeight(8)
+        touch_layout.addWidget(self.prog_touch)
+
+        # Event and Stats row
+        touch_stats_row = QHBoxLayout()
+        self.lbl_touch_event = QLabel("Событие: Ожидание первого касания")
+        self.lbl_touch_event.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        self.lbl_touch_event.setStyleSheet("color: #00cec9;")
+
+        self.lbl_touch_counter = QLabel("Касаний: 0 | Длительность: 0 мс")
+        self.lbl_touch_counter.setStyleSheet("color: #8892B0; font-size: 10px;")
+
+        self.btn_reset_counter = QPushButton("Сброс")
+        self.btn_reset_counter.setStyleSheet("background-color: #242933; color: #8892B0; padding: 2px 8px; font-size: 10px;")
+        self.btn_reset_counter.clicked.connect(self.on_reset_touch_counter)
+
+        touch_stats_row.addWidget(self.lbl_touch_event, 1)
+        touch_stats_row.addWidget(self.lbl_touch_counter)
+        touch_stats_row.addWidget(self.btn_reset_counter)
+        touch_layout.addLayout(touch_stats_row)
+
         root.addWidget(touch_card)
 
         # ─── 3. Card: 4 COB Filaments (PB2 / TIM1_CH3) ───
@@ -614,6 +657,13 @@ class MainWindow(QMainWindow):
         self.chk_auto_sync.setChecked(False)
         self.worker.set_disp_param('DISP_COLOR', index)
 
+    def on_reset_touch_counter(self):
+        self.touch_clicks_count = 0
+        self.prog_touch.setValue(0)
+        self.lbl_touch_counter.setText("Касаний: 0 | Длительность: 0 мс")
+        self.lbl_touch_event.setText("Событие: Счётчик сброшен")
+        self.lbl_touch_event.setStyleSheet("color: #8892B0; font-weight: bold;")
+
     # ─── Live Telemetry ───
     def on_telemetry_updated(self, telem):
         self.cur_fil_state = telem['fil_state']
@@ -621,13 +671,58 @@ class MainWindow(QMainWindow):
         self.cur_led_state = telem['led_state']
         self.mem_led_saved = telem['led_saved']
 
-        # Touch sensor indicator
-        if telem['touch_raw']:
-            self.touch_badge.setText("👆 ПРИКОСНОВЕНИЕ!")
-            self.touch_badge.setStyleSheet("background-color: #27ae60; color: #ffffff; padding: 4px 12px; border-radius: 6px; font-weight: bold;")
-        else:
+        # ─── Touch Sensor Real-Time Diagnostics ───
+        now_sec = time.time()
+        raw = telem['touch_raw']
+
+        # 1. Edge: 0 -> 1 (Touch Down)
+        if raw and not self.last_touch_raw:
+            self.touch_press_start = now_sec
+            self.touch_clicks_count += 1
+            if (now_sec - self.last_release_time) < 0.35:
+                self.lbl_touch_event.setText("Событие: ⚡ ДВОЙНОЙ КЛИК!")
+                self.lbl_touch_event.setStyleSheet("color: #fdcb6e; font-weight: bold;")
+            else:
+                self.lbl_touch_event.setText("Событие: 👆 Нажатие...")
+                self.lbl_touch_event.setStyleSheet("color: #00cec9; font-weight: bold;")
+
+        # 2. Level: 1 (Holding / Pressed)
+        if raw:
+            press_duration_ms = int((now_sec - self.touch_press_start) * 1000)
+            self.prog_touch.setValue(min(1500, press_duration_ms))
+            self.lbl_touch_counter.setText(f"Касаний: {self.touch_clicks_count} | Длительность: {press_duration_ms} мс")
+            self.touch_badge.setText(f"👆 ЗАЖАТО ({press_duration_ms} мс)")
+            if press_duration_ms >= 1200:
+                self.touch_badge.setStyleSheet("background-color: #d63031; color: #ffffff; padding: 4px 12px; border-radius: 6px; font-weight: bold;")
+                self.lbl_touch_event.setText(f"Событие: 🔒 ДОЛГОЕ УДЕРЖАНИЕ ({press_duration_ms} мс)")
+                self.lbl_touch_event.setStyleSheet("color: #e17055; font-weight: bold;")
+            elif press_duration_ms >= 350:
+                self.touch_badge.setStyleSheet("background-color: #e67e22; color: #ffffff; padding: 4px 12px; border-radius: 6px; font-weight: bold;")
+                self.lbl_touch_event.setText(f"Событие: 🔆 ДИММИРОВАНИЕ ({press_duration_ms} мс)")
+                self.lbl_touch_event.setStyleSheet("color: #fdcb6e; font-weight: bold;")
+            else:
+                self.touch_badge.setStyleSheet("background-color: #27ae60; color: #ffffff; padding: 4px 12px; border-radius: 6px; font-weight: bold;")
+
+        # 3. Edge: 1 -> 0 (Release / Touch Up)
+        elif not raw and self.last_touch_raw:
+            release_duration_ms = int((now_sec - self.touch_press_start) * 1000)
+            self.last_release_time = now_sec
+            self.prog_touch.setValue(0)
+            self.lbl_touch_counter.setText(f"Касаний: {self.touch_clicks_count} | Длительность: {release_duration_ms} мс")
             self.touch_badge.setText("ОЖИДАНИЕ")
             self.touch_badge.setStyleSheet("background-color: #242933; color: #8892B0; padding: 4px 12px; border-radius: 6px;")
+
+            if release_duration_ms < 350:
+                self.lbl_touch_event.setText(f"Событие: 🎯 ОДИНОЧНЫЙ КЛИК ({release_duration_ms} мс)")
+                self.lbl_touch_event.setStyleSheet("color: #2ecc71; font-weight: bold;")
+            elif release_duration_ms < 1200:
+                self.lbl_touch_event.setText(f"Событие: 🔆 ДИММИРОВАНИЕ ЗАВЕРШЕНО ({release_duration_ms} мс)")
+                self.lbl_touch_event.setStyleSheet("color: #f39c12; font-weight: bold;")
+            else:
+                self.lbl_touch_event.setText(f"Событие: 🔒 ДОЛГИЙ КЛИК ЗАВЕРШЕН ({release_duration_ms} мс)")
+                self.lbl_touch_event.setStyleSheet("color: #e74c3c; font-weight: bold;")
+
+        self.last_touch_raw = raw
 
         # Update Filaments UI
         if not self.fil_dragging:
