@@ -181,6 +181,7 @@ class MainWindow(QMainWindow):
         self.last_touch_raw = 0
         self.touch_clicks_count = 0
         self.last_release_time = 0.0
+        self.click_train = 0
 
         self.worker = SwdWorker()
         self.worker.connection_changed.connect(self.on_connection_changed)
@@ -679,12 +680,12 @@ class MainWindow(QMainWindow):
         if raw and not self.last_touch_raw:
             self.touch_press_start = now_sec
             self.touch_clicks_count += 1
-            if (now_sec - self.last_release_time) < 0.35:
-                self.lbl_touch_event.setText("Событие: ⚡ ДВОЙНОЙ КЛИК!")
-                self.lbl_touch_event.setStyleSheet("color: #fdcb6e; font-weight: bold;")
+            if (now_sec - self.last_release_time) < 0.38:
+                self.click_train += 1
             else:
-                self.lbl_touch_event.setText("Событие: 👆 Нажатие...")
-                self.lbl_touch_event.setStyleSheet("color: #00cec9; font-weight: bold;")
+                self.click_train = 1
+            self.lbl_touch_event.setText(f"Событие: 👆 Нажатие #{self.click_train}...")
+            self.lbl_touch_event.setStyleSheet("color: #00cec9; font-weight: bold;")
 
         # 2. Level: 1 (Holding / Pressed)
         if raw:
@@ -713,8 +714,24 @@ class MainWindow(QMainWindow):
             self.touch_badge.setStyleSheet("background-color: #242933; color: #8892B0; padding: 4px 12px; border-radius: 6px;")
 
             if release_duration_ms < 350:
-                self.lbl_touch_event.setText(f"Событие: 🎯 ОДИНОЧНЫЙ КЛИК ({release_duration_ms} мс)")
-                self.lbl_touch_event.setStyleSheet("color: #2ecc71; font-weight: bold;")
+                if self.click_train == 1:
+                    self.lbl_touch_event.setText(f"Событие: 🎯 ОДИНОЧНЫЙ КЛИК ({release_duration_ms} мс)")
+                    self.lbl_touch_event.setStyleSheet("color: #2ecc71; font-weight: bold;")
+                elif self.click_train == 2:
+                    self.lbl_touch_event.setText(f"Событие: ⚡ ДВОЙНОЙ КЛИК! ({release_duration_ms} мс)")
+                    self.lbl_touch_event.setStyleSheet("color: #fdcb6e; font-weight: bold;")
+                elif self.click_train == 3:
+                    self.lbl_touch_event.setText(f"Событие: 🔥 ТРОЙНОЙ КЛИК! (3 клика)")
+                    self.lbl_touch_event.setStyleSheet("color: #e67e22; font-weight: bold;")
+                elif self.click_train == 4:
+                    self.lbl_touch_event.setText(f"Событие: 💥 ЧЕТВЕРНОЙ КЛИК! (4 клика)")
+                    self.lbl_touch_event.setStyleSheet("color: #e74c3c; font-weight: bold;")
+                elif self.click_train == 5:
+                    self.lbl_touch_event.setText(f"Событие: 🚀 ПЯТИКРАТНЫЙ КЛИК! (5 кликов)")
+                    self.lbl_touch_event.setStyleSheet("color: #9b59b6; font-weight: bold;")
+                else:
+                    self.lbl_touch_event.setText(f"Событие: 🌟 СЕРИЯ КЛИКОВ: {self.click_train} раз!")
+                    self.lbl_touch_event.setStyleSheet("color: #1abc9c; font-weight: bold;")
             elif release_duration_ms < 1200:
                 self.lbl_touch_event.setText(f"Событие: 🔆 ДИММИРОВАНИЕ ЗАВЕРШЕНО ({release_duration_ms} мс)")
                 self.lbl_touch_event.setStyleSheet("color: #f39c12; font-weight: bold;")

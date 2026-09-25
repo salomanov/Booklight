@@ -176,6 +176,51 @@ def run_tests():
     assert btn.clicks == 2, "Click count should be 2"
     print("PASSED (Double click event cleanly registered!)")
 
+    # TEST 3b: Triple Click (3 clicks)
+    print("[3b] Testing triple click (3 clicks)...", end=" ")
+    btn.reset()
+    now += 500
+    btn.tick(False, now)
+    for i in range(1, 4):
+        btn.tick(True, now)
+        now += 30; btn.tick(True, now)
+        now += 60; btn.tick(False, now)
+        now += 30; btn.tick(False, now)
+        assert btn.clicks == i, f"Expected {i} clicks, got {btn.clicks}"
+        now += 80 # Next click within timeout
+    assert btn.clicks == 3, "Final click count should be 3"
+    print("PASSED (Triple click cleanly registered: 3/3!)")
+
+    # TEST 3c: Quadruple Click (4 clicks)
+    print("[3c] Testing quadruple click (4 clicks)...", end=" ")
+    btn.reset()
+    now += 500
+    btn.tick(False, now)
+    for i in range(1, 5):
+        btn.tick(True, now)
+        now += 30; btn.tick(True, now)
+        now += 60; btn.tick(False, now)
+        now += 30; btn.tick(False, now)
+        assert btn.clicks == i, f"Expected {i} clicks, got {btn.clicks}"
+        now += 80
+    assert btn.clicks == 4, "Final click count should be 4"
+    print("PASSED (Quadruple click cleanly registered: 4/4!)")
+
+    # TEST 3d: Quintuple Click (5 clicks)
+    print("[3d] Testing quintuple click (5 clicks)...", end=" ")
+    btn.reset()
+    now += 500
+    btn.tick(False, now)
+    for i in range(1, 6):
+        btn.tick(True, now)
+        now += 30; btn.tick(True, now)
+        now += 60; btn.tick(False, now)
+        now += 30; btn.tick(False, now)
+        assert btn.clicks == i, f"Expected {i} clicks, got {btn.clicks}"
+        now += 80
+    assert btn.clicks == 5, "Final click count should be 5"
+    print("PASSED (Quintuple click cleanly registered: 5/5!)")
+
     # TEST 4: Hold & Smooth Step Dimming
     print("[4] Testing hold & smooth step dimming...", end=" ")
     btn.reset()

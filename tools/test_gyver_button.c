@@ -66,6 +66,54 @@ int main(void)
     assert(ubutton_get_clicks(&btn) == 2);
     printf("PASSED (Double click registered!)\n");
 
+    // --- TEST 3b: Triple Click (3 clicks) ---
+    printf("[3b] Testing triple click (3 clicks)... ");
+    ubutton_reset(&btn);
+    now += 400;
+    ubutton_tick(&btn, false, now);
+    for (int i = 1; i <= 3; i++) {
+        ubutton_tick(&btn, true, now);
+        now += 30; ubutton_tick(&btn, true, now);
+        now += 60; ubutton_tick(&btn, false, now);
+        now += 30; ubutton_tick(&btn, false, now);
+        assert(ubutton_get_clicks(&btn) == i);
+        now += 80;
+    }
+    assert(ubutton_has_clicks(&btn, 3) == true);
+    printf("PASSED (Triple click 3/3 registered!)\n");
+
+    // --- TEST 3c: Quadruple Click (4 clicks) ---
+    printf("[3c] Testing quadruple click (4 clicks)... ");
+    ubutton_reset(&btn);
+    now += 400;
+    ubutton_tick(&btn, false, now);
+    for (int i = 1; i <= 4; i++) {
+        ubutton_tick(&btn, true, now);
+        now += 30; ubutton_tick(&btn, true, now);
+        now += 60; ubutton_tick(&btn, false, now);
+        now += 30; ubutton_tick(&btn, false, now);
+        assert(ubutton_get_clicks(&btn) == i);
+        now += 80;
+    }
+    assert(ubutton_has_clicks(&btn, 4) == true);
+    printf("PASSED (Quadruple click 4/4 registered!)\n");
+
+    // --- TEST 3d: Quintuple Click (5 clicks) ---
+    printf("[3d] Testing quintuple click (5 clicks)... ");
+    ubutton_reset(&btn);
+    now += 400;
+    ubutton_tick(&btn, false, now);
+    for (int i = 1; i <= 5; i++) {
+        ubutton_tick(&btn, true, now);
+        now += 30; ubutton_tick(&btn, true, now);
+        now += 60; ubutton_tick(&btn, false, now);
+        now += 30; ubutton_tick(&btn, false, now);
+        assert(ubutton_get_clicks(&btn) == i);
+        now += 80;
+    }
+    assert(ubutton_has_clicks(&btn, 5) == true);
+    printf("PASSED (Quintuple click 5/5 registered!)\n");
+
     // --- TEST 4: Hold & Step Dimming ---
     printf("[4] Testing hold & periodic step dimming... ");
     ubutton_reset(&btn);
