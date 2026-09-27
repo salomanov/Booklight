@@ -17,19 +17,14 @@ void gled_set_gamma(gyver_led_t *l, bool enable) {
 
 static void update_pwm(gyver_led_t *l) {
     if (l->gamma_en) {
-        // Gamma 2.2 через таблицу AlexGyver (100 шагов → 0..100)
-        // current = 0..255, масштабируем до 0..100 для таблицы
-        uint8_t pct = (uint8_t)((uint32_t)l->current * 100 / 255);
-        uint8_t gamma_val = gyver_gamma2(pct); // 0..100
-        l->pwm_val = (uint16_t)((uint32_t)gamma_val * l->out_max / 100);
-        
-        // Защита от полного затухания, если значение больше 0
-        if (l->current > 0 && l->pwm_val == 0) {
-            l->pwm_val = 1; 
+        if (l->current == 0) {
+            l->pwm_val = 0;
+        } else {
+            l->pwm_val = gyver_gamma_pwm(l->current, l->out_max);
         }
     } else {
         // Линейно
-        l->pwm_val = (l->current * l->out_max) / 255;
+        l->pwm_val = (uint16_t)(((uint32_t)l->current * l->out_max) / 255);
     }
 }
 
