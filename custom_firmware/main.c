@@ -106,7 +106,7 @@ volatile LampSharedControl_t g_lamp = {
     .chrg_pin_raw    = 1,
     .is_charging     = 0,
 
-    .btn_click_timeout_ms = 450,
+    .btn_click_timeout_ms = 500,
     .btn_hold_time_ms     = 400,
     .btn_long_hold_ms     = 1200,
     .btn_last_clicks      = 0,

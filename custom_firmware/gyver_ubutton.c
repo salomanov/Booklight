@@ -18,7 +18,7 @@ void ubutton_reset(ubutton_t *b)
     b->is_step_active = false;
     b->long_hold_fired = false;
     b->hold_duration_ms = 0;
-    b->timeout_click_ms = 450;
+    b->timeout_click_ms = 500;
     b->timeout_hold_ms  = UB_HOLD_TIME_MS;
     b->timeout_long_ms  = UB_LONG_HOLD_MS;
 }
