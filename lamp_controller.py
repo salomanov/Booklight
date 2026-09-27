@@ -43,6 +43,13 @@ ADDR_BAT_ADC_RAW       = ADDR_LAMP_BASE + 0x58  # 12-bit ADC raw code
 ADDR_CHRG_PIN_RAW      = ADDR_LAMP_BASE + 0x5C  # 0 = LOW (charging), 1 = HIGH (idle)
 ADDR_IS_CHARGING       = ADDR_LAMP_BASE + 0x60  # 1 = charging, 0 = battery
 
+# Step 7: Dynamic Button Timings & Telemetry (GyverButton)
+ADDR_BTN_CLICK_TIMEOUT = ADDR_LAMP_BASE + 0x64  # ms (default 450)
+ADDR_BTN_HOLD_TIME     = ADDR_LAMP_BASE + 0x68  # ms (default 400)
+ADDR_BTN_LONG_HOLD     = ADDR_LAMP_BASE + 0x6C  # ms (default 1200)
+ADDR_BTN_LAST_CLICKS   = ADDR_LAMP_BASE + 0x70  # live count (1..5)
+ADDR_BTN_LAST_EVENT    = ADDR_LAMP_BASE + 0x74  # event enum
+
 TARGET = 'py32f002bx5'
 
 COLOR_NAMES = ["Выкл", "Красный", "Зелёный", "Синий", "Циан", "Маджента", "Жёлтый", "Белый"]
@@ -65,6 +72,9 @@ class SwdWorker(QThread):
         self.command_queue.put(('LED_TARGET', max(0, min(100, int(val_100)))))
 
     def set_disp_param(self, field, val):
+        self.command_queue.put((field, int(val)))
+
+    def set_btn_param(self, field, val):
         self.command_queue.put((field, int(val)))
 
     def stop(self):
@@ -121,10 +131,16 @@ class SwdWorker(QThread):
                         target.write32(base + 0x48, val)
                     elif cmd == 'DISP_AUTO':
                         target.write32(base + 0x4C, val)
+                    elif cmd == 'BTN_CLICK_TIMEOUT':
+                        target.write32(base + 0x64, val)
+                    elif cmd == 'BTN_HOLD_TIME':
+                        target.write32(base + 0x68, val)
+                    elif cmd == 'BTN_LONG_HOLD':
+                        target.write32(base + 0x6C, val)
 
-                # Read telemetry block (25 x 32-bit words = 100 bytes)
+                # Read telemetry block (30 x 32-bit words = 120 bytes)
                 base = self.lamp_base if self.lamp_base is not None else 0x20000000
-                data = target.read_memory_block32(base, 25)
+                data = target.read_memory_block32(base, 30)
                 if data[0] == 0x50574D31:
                     telem = {
                         'fil_target': data[1],
@@ -151,6 +167,11 @@ class SwdWorker(QThread):
                         'bat_adc':    data[22],
                         'chrg_pin':   data[23],
                         'is_charging':data[24],
+                        'btn_timeout':data[25],
+                        'btn_hold':   data[26],
+                        'btn_long':   data[27],
+                        'btn_clicks': data[28],
+                        'btn_event':  data[29],
                     }
                     self.telemetry_updated.emit(telem)
                 else:
@@ -183,7 +204,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("BookLight — Филаменты + Светодиоды + Дисплей FH8016 + АКБ и C60H")
-        self.setFixedSize(780, 1020)
+        self.setFixedSize(780, 1080)
 
         self.fil_dragging = False
         self.led_dragging = False
@@ -194,12 +215,15 @@ class MainWindow(QMainWindow):
         self.cur_fil_state = 0
         self.cur_led_state = 0
 
-        # Touch sensor diagnostics
+        # Touch sensor diagnostics & dynamic timing settings
         self.touch_press_start = 0.0
         self.last_touch_raw = 0
         self.touch_clicks_count = 0
         self.last_release_time = 0.0
         self.click_train = 0
+        self.cur_click_timeout_ms = 450
+        self.cur_hold_time_ms = 400
+        self.cur_long_hold_ms = 1200
 
         self.worker = SwdWorker()
         self.worker.connection_changed.connect(self.on_connection_changed)
@@ -337,6 +361,58 @@ class MainWindow(QMainWindow):
         touch_stats_row.addWidget(self.lbl_touch_counter)
         touch_stats_row.addWidget(self.btn_reset_counter)
         touch_layout.addLayout(touch_stats_row)
+
+        # Interactive Delay Tuning Box
+        t_box = QFrame()
+        t_box.setStyleSheet("background-color: #161920; border: 1px solid #2B303C; border-radius: 8px; padding: 6px;")
+        t_layout = QVBoxLayout(t_box)
+        t_layout.setSpacing(4)
+
+        t_row1 = QHBoxLayout()
+        lbl_t1 = QLabel("⏱️ Пауза между кликами в серии (Timeout):")
+        lbl_t1.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        lbl_t1.setStyleSheet("color: #74b9ff;")
+
+        self.slider_click_timeout = QSlider(Qt.Orientation.Horizontal)
+        self.slider_click_timeout.setRange(150, 1000)
+        self.slider_click_timeout.setValue(450)
+        self.slider_click_timeout.setStyleSheet("""
+            QSlider::sub-page:horizontal { background: #0984e3; border-radius: 4px; }
+            QSlider::handle:horizontal { background: #ffffff; border: 2px solid #0984e3; width: 18px; margin: -5px 0; border-radius: 9px; }
+        """)
+        self.slider_click_timeout.valueChanged.connect(self.on_click_timeout_changed)
+
+        self.lbl_click_timeout_val = QLabel("450 мс")
+        self.lbl_click_timeout_val.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        self.lbl_click_timeout_val.setFixedWidth(55)
+        self.lbl_click_timeout_val.setStyleSheet("color: #74b9ff;")
+
+        t_row1.addWidget(lbl_t1)
+        t_row1.addWidget(self.slider_click_timeout, 1)
+        t_row1.addWidget(self.lbl_click_timeout_val)
+        t_layout.addLayout(t_row1)
+
+        # Quick Presets Row
+        t_presets = QHBoxLayout()
+        t_presets.setSpacing(4)
+        t_presets_lbl = QLabel("Быстрый выбор:")
+        t_presets_lbl.setStyleSheet("color: #8892B0; font-size: 10px;")
+        t_presets.addWidget(t_presets_lbl)
+        presets = [
+            (250, "⚡ 250 мс (Быстро)"),
+            (380, "👍 380 мс (Стандарт)"),
+            (500, "☕ 500 мс (Комфорт)"),
+            (650, "🧘 650 мс (Спокойно)"),
+            (850, "🐢 850 мс (Мягко)"),
+        ]
+        for ms_val, text_label in presets:
+            btn = QPushButton(text_label)
+            btn.setStyleSheet("background-color: #242933; color: #dfe6e9; padding: 3px 6px; font-size: 10px; border-radius: 4px;")
+            btn.clicked.connect(lambda checked, val=ms_val: self.set_click_timeout_preset(val))
+            t_presets.addWidget(btn)
+        t_layout.addLayout(t_presets)
+
+        touch_layout.addWidget(t_box)
 
         root.addWidget(touch_card)
 
@@ -684,6 +760,16 @@ class MainWindow(QMainWindow):
         self.lbl_touch_event.setText("Событие: Счётчик сброшен")
         self.lbl_touch_event.setStyleSheet("color: #8892B0; font-weight: bold;")
 
+    def on_click_timeout_changed(self, val):
+        self.cur_click_timeout_ms = val
+        self.lbl_click_timeout_val.setText(f"{val} мс")
+        self.touch_sub.setText(f"Определяет: Клик (<{self.cur_hold_time_ms}мс), Серия (пауза <{val}мс), Удержание (>{self.cur_hold_time_ms}мс)")
+        if hasattr(self, 'worker') and self.worker:
+            self.worker.set_btn_param('BTN_CLICK_TIMEOUT', val)
+
+    def set_click_timeout_preset(self, val):
+        self.slider_click_timeout.setValue(val)
+
     # ─── Live Telemetry ───
     def on_telemetry_updated(self, telem):
         self.cur_fil_state = telem['fil_state']
@@ -694,16 +780,17 @@ class MainWindow(QMainWindow):
         # ─── Touch Sensor Real-Time Diagnostics ───
         now_sec = time.time()
         raw = telem['touch_raw']
+        mcu_clicks = telem.get('btn_clicks', 0)
 
         # 1. Edge: 0 -> 1 (Touch Down)
         if raw and not self.last_touch_raw:
             self.touch_press_start = now_sec
             self.touch_clicks_count += 1
-            if (now_sec - self.last_release_time) < 0.38:
+            if (now_sec - self.last_release_time) < (self.cur_click_timeout_ms / 1000.0):
                 self.click_train += 1
             else:
                 self.click_train = 1
-            self.lbl_touch_event.setText(f"Событие: 👆 Нажатие #{self.click_train}...")
+            self.lbl_touch_event.setText(f"Событие: 👆 Нажатие #{self.click_train} (МК кликов: {mcu_clicks})...")
             self.lbl_touch_event.setStyleSheet("color: #00cec9; font-weight: bold;")
 
         # 2. Level: 1 (Holding / Pressed)
@@ -712,11 +799,11 @@ class MainWindow(QMainWindow):
             self.prog_touch.setValue(min(1500, press_duration_ms))
             self.lbl_touch_counter.setText(f"Касаний: {self.touch_clicks_count} | Длительность: {press_duration_ms} мс")
             self.touch_badge.setText(f"👆 ЗАЖАТО ({press_duration_ms} мс)")
-            if press_duration_ms >= 1200:
+            if press_duration_ms >= self.cur_long_hold_ms:
                 self.touch_badge.setStyleSheet("background-color: #d63031; color: #ffffff; padding: 4px 12px; border-radius: 6px; font-weight: bold;")
                 self.lbl_touch_event.setText(f"Событие: 🔒 ДОЛГОЕ УДЕРЖАНИЕ ({press_duration_ms} мс)")
                 self.lbl_touch_event.setStyleSheet("color: #e17055; font-weight: bold;")
-            elif press_duration_ms >= 350:
+            elif press_duration_ms >= self.cur_hold_time_ms:
                 self.touch_badge.setStyleSheet("background-color: #e67e22; color: #ffffff; padding: 4px 12px; border-radius: 6px; font-weight: bold;")
                 self.lbl_touch_event.setText(f"Событие: 🔆 ДИММИРОВАНИЕ ({press_duration_ms} мс)")
                 self.lbl_touch_event.setStyleSheet("color: #fdcb6e; font-weight: bold;")
@@ -732,26 +819,27 @@ class MainWindow(QMainWindow):
             self.touch_badge.setText("ОЖИДАНИЕ")
             self.touch_badge.setStyleSheet("background-color: #242933; color: #8892B0; padding: 4px 12px; border-radius: 6px;")
 
-            if release_duration_ms < 350:
-                if self.click_train == 1:
+            if release_duration_ms < self.cur_hold_time_ms:
+                cnt = mcu_clicks if mcu_clicks > 0 else self.click_train
+                if cnt == 1:
                     self.lbl_touch_event.setText(f"Событие: 🎯 ОДИНОЧНЫЙ КЛИК ({release_duration_ms} мс)")
                     self.lbl_touch_event.setStyleSheet("color: #2ecc71; font-weight: bold;")
-                elif self.click_train == 2:
-                    self.lbl_touch_event.setText(f"Событие: ⚡ ДВОЙНОЙ КЛИК! ({release_duration_ms} мс)")
+                elif cnt == 2:
+                    self.lbl_touch_event.setText(f"Событие: ⚡ ДВОЙНОЙ КЛИК! ({release_duration_ms} мс, пауза <{self.cur_click_timeout_ms}мс)")
                     self.lbl_touch_event.setStyleSheet("color: #fdcb6e; font-weight: bold;")
-                elif self.click_train == 3:
-                    self.lbl_touch_event.setText(f"Событие: 🔥 ТРОЙНОЙ КЛИК! (3 клика)")
+                elif cnt == 3:
+                    self.lbl_touch_event.setText(f"Событие: 🔥 ТРОЙНОЙ КЛИК! (3 клика, пауза <{self.cur_click_timeout_ms}мс)")
                     self.lbl_touch_event.setStyleSheet("color: #e67e22; font-weight: bold;")
-                elif self.click_train == 4:
+                elif cnt == 4:
                     self.lbl_touch_event.setText(f"Событие: 💥 ЧЕТВЕРНОЙ КЛИК! (4 клика)")
                     self.lbl_touch_event.setStyleSheet("color: #e74c3c; font-weight: bold;")
-                elif self.click_train == 5:
+                elif cnt == 5:
                     self.lbl_touch_event.setText(f"Событие: 🚀 ПЯТИКРАТНЫЙ КЛИК! (5 кликов)")
                     self.lbl_touch_event.setStyleSheet("color: #9b59b6; font-weight: bold;")
                 else:
-                    self.lbl_touch_event.setText(f"Событие: 🌟 СЕРИЯ КЛИКОВ: {self.click_train} раз!")
+                    self.lbl_touch_event.setText(f"Событие: 🌟 СЕРИЯ КЛИКОВ: {cnt} раз!")
                     self.lbl_touch_event.setStyleSheet("color: #1abc9c; font-weight: bold;")
-            elif release_duration_ms < 1200:
+            elif release_duration_ms < self.cur_long_hold_ms:
                 self.lbl_touch_event.setText(f"Событие: 🔆 ДИММИРОВАНИЕ ЗАВЕРШЕНО ({release_duration_ms} мс)")
                 self.lbl_touch_event.setStyleSheet("color: #f39c12; font-weight: bold;")
             else:
