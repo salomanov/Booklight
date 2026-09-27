@@ -18,6 +18,24 @@ void ubutton_reset(ubutton_t *b)
     b->is_step_active = false;
     b->long_hold_fired = false;
     b->hold_duration_ms = 0;
+    b->timeout_click_ms = 450;
+    b->timeout_hold_ms  = UB_HOLD_TIME_MS;
+    b->timeout_long_ms  = UB_LONG_HOLD_MS;
+}
+
+void ubutton_set_click_timeout(ubutton_t *b, uint16_t timeout_ms)
+{
+    if (timeout_ms >= 50) b->timeout_click_ms = timeout_ms;
+}
+
+void ubutton_set_hold_time(ubutton_t *b, uint16_t hold_ms)
+{
+    if (hold_ms >= 50) b->timeout_hold_ms = hold_ms;
+}
+
+void ubutton_set_long_hold_time(ubutton_t *b, uint16_t long_hold_ms)
+{
+    if (long_hold_ms >= 100) b->timeout_long_ms = long_hold_ms;
 }
 
 bool ubutton_tick(ubutton_t *b, bool pin_state, uint32_t now_ms)
@@ -102,7 +120,7 @@ bool ubutton_tick(ubutton_t *b, bool pin_state, uint32_t now_ms)
 
     /* 2. Check multi-click counter reset timeout */
     if (!b->pressed && b->clicks > 0) {
-        if (now_ms - b->last_release_ms >= UB_CLICK_TIMEOUT_MS) {
+        if (now_ms - b->last_release_ms >= b->timeout_click_ms) {
             b->clicks = 0;
         }
     }
@@ -112,7 +130,7 @@ bool ubutton_tick(ubutton_t *b, bool pin_state, uint32_t now_ms)
         b->hold_duration_ms = now_ms - b->press_start_ms;
 
         if (b->state == UB_STATE_WAIT_HOLD) {
-            if (now_ms - b->press_start_ms >= UB_HOLD_TIME_MS) {
+            if (now_ms - b->press_start_ms >= b->timeout_hold_ms) {
                 b->state = UB_STATE_HOLD;
                 b->last_event = UB_EVT_HOLD;
                 b->hold_tmr = now_ms;
@@ -120,8 +138,8 @@ bool ubutton_tick(ubutton_t *b, bool pin_state, uint32_t now_ms)
                 return true;
             }
         } else if (b->state == UB_STATE_WAIT_STEP) {
-            /* Check Long Hold threshold (>1200 ms) */
-            if (!b->long_hold_fired && (now_ms - b->press_start_ms >= UB_LONG_HOLD_MS)) {
+            /* Check Long Hold threshold */
+            if (!b->long_hold_fired && (now_ms - b->press_start_ms >= b->timeout_long_ms)) {
                 b->long_hold_fired = true;
                 b->last_event = UB_EVT_LONG_HOLD;
                 return true;

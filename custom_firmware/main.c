@@ -65,6 +65,13 @@ typedef struct {
     uint32_t bat_adc_raw;        // +0x58: raw ADC 12-bit code (0..4095)
     uint32_t chrg_pin_raw;       // +0x5C: 0 = LOW (charging active), 1 = HIGH (idle)
     uint32_t is_charging;        // +0x60: 1 = charging, 0 = battery power
+
+    /* Interactive Button Timing Configuration & Telemetry */
+    uint32_t btn_click_timeout_ms; // +0x64: Click timeout between multi-clicks (default 450 ms)
+    uint32_t btn_hold_time_ms;     // +0x68: Hold threshold to start dimming (default 400 ms)
+    uint32_t btn_long_hold_ms;     // +0x6C: Long hold threshold (default 1200 ms)
+    uint32_t btn_last_clicks;      // +0x70: Live clicks recognized by MCU
+    uint32_t btn_last_event;       // +0x74: Live event enum recognized by MCU
 } LampSharedControl_t;
 
 __attribute__((section(".data.00_lamp_shared"), aligned(4)))
@@ -97,7 +104,13 @@ volatile LampSharedControl_t g_lamp = {
     .bat_percent     = 1,
     .bat_adc_raw     = 1489,
     .chrg_pin_raw    = 1,
-    .is_charging     = 0
+    .is_charging     = 0,
+
+    .btn_click_timeout_ms = 450,
+    .btn_hold_time_ms     = 400,
+    .btn_long_hold_ms     = 1200,
+    .btn_last_clicks      = 0,
+    .btn_last_event       = 0
 };
 
 /* Millisecond timebase via SysTick */
@@ -301,9 +314,25 @@ int main(void)
         bool is_touched = (GPIOB->IDR & (1U << 4)) != 0;
         g_lamp.touch_raw = is_touched ? 1 : 0;
 
+        /* Dynamic button timing configuration from SWD */
+        if (g_lamp.btn_click_timeout_ms >= 50 && g_lamp.btn_click_timeout_ms <= 2000)
+        {
+            ubutton_set_click_timeout(&touch_btn, (uint16_t)g_lamp.btn_click_timeout_ms);
+        }
+        if (g_lamp.btn_hold_time_ms >= 50 && g_lamp.btn_hold_time_ms <= 2000)
+        {
+            ubutton_set_hold_time(&touch_btn, (uint16_t)g_lamp.btn_hold_time_ms);
+        }
+        if (g_lamp.btn_long_hold_ms >= 100 && g_lamp.btn_long_hold_ms <= 5000)
+        {
+            ubutton_set_long_hold_time(&touch_btn, (uint16_t)g_lamp.btn_long_hold_ms);
+        }
+
         /* B. Tick GyverButton state machine (Controls ONLY Filaments) */
         if (ubutton_tick(&touch_btn, is_touched, now))
         {
+            g_lamp.btn_last_clicks = touch_btn.clicks;
+            g_lamp.btn_last_event  = (uint32_t)touch_btn.last_event;
             /* Short click: Toggle Filaments ON / OFF with last-value memory */
             if (ubutton_click(&touch_btn))
             {

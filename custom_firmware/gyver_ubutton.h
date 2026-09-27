@@ -53,10 +53,16 @@ typedef struct {
     bool is_step_active;        /* True if at least one step has fired during hold */
     bool long_hold_fired;       /* True if long hold event has already triggered */
     uint32_t hold_duration_ms;  /* Duration button is currently held in ms */
+    uint16_t timeout_click_ms;  /* Click timeout in ms (default 450) */
+    uint16_t timeout_hold_ms;   /* Hold timeout in ms (default 400) */
+    uint16_t timeout_long_ms;   /* Long hold timeout in ms (default 1200) */
 } ubutton_t;
 
 void ubutton_init(ubutton_t *b);
 void ubutton_reset(ubutton_t *b);
+void ubutton_set_click_timeout(ubutton_t *b, uint16_t timeout_ms);
+void ubutton_set_hold_time(ubutton_t *b, uint16_t hold_ms);
+void ubutton_set_long_hold_time(ubutton_t *b, uint16_t long_hold_ms);
 
 /* Call periodically (e.g. every 1-5 ms) with current pin state (true = touched/pressed) */
 bool ubutton_tick(ubutton_t *b, bool pin_state, uint32_t now_ms);
