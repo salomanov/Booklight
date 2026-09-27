@@ -296,7 +296,8 @@ int main(void)
     ubutton_t touch_btn;
     ubutton_init(&touch_btn);
 
-    int8_t dim_direction = 1;             // +1 = brightening, -1 = dimming
+    int8_t dim_direction = -1;             // -1 = dimming down first, +1 = brightening up
+    uint32_t show_bat_until_ms = 0;        // Battery preview duration on 1-click (5 seconds)
     uint32_t last_swd_fil_target = 0;
     uint32_t last_swd_led_target = 0;
     uint32_t last_disp_ms = 0;
@@ -333,8 +334,15 @@ int main(void)
         {
             g_lamp.btn_last_clicks = touch_btn.clicks;
             g_lamp.btn_last_event  = (uint32_t)touch_btn.last_event;
-            /* Short click: Toggle Filaments ON / OFF with last-value memory */
-            if (ubutton_click(&touch_btn))
+
+            /* 1 click: Show battery status on display for 5 seconds */
+            if (ubutton_has_clicks(&touch_btn, 1))
+            {
+                show_bat_until_ms = now + 5000;
+            }
+
+            /* 3 fast clicks: Toggle Filaments ON / OFF with last-value memory */
+            if (ubutton_has_clicks(&touch_btn, 3))
             {
                 if (g_lamp.fil_state)
                 {
@@ -342,6 +350,7 @@ int main(void)
                     g_lamp.fil_target_pct = 0;
                     last_swd_fil_target = 0;
                     gled_fade(&fil_led, 0, g_lamp.fade_time_ms);
+                    show_bat_until_ms = 0;
                 }
                 else
                 {
@@ -351,33 +360,38 @@ int main(void)
                     last_swd_fil_target = g_lamp.fil_saved_pct;
                     uint8_t byte_val = (uint8_t)((g_lamp.fil_saved_pct * 255U) / 100U);
                     gled_fade(&fil_led, byte_val, g_lamp.fade_time_ms);
+                    dim_direction = -1; /* Always dim DOWN first on subsequent hold */
+                    show_bat_until_ms = 0;
                 }
             }
 
-            /* Hold: Smooth dimming of Filaments */
+            /* Hold: Smooth dimming of Filaments (ONLY when light is ON) */
             if (ubutton_step(&touch_btn))
             {
-                if (!g_lamp.fil_state)
+                if (g_lamp.fil_state)
                 {
-                    g_lamp.fil_state = 1;
+                    show_bat_until_ms = 0; /* Switch display back to brightness % */
+
+                    int32_t new_pct = (int32_t)g_lamp.fil_saved_pct + (dim_direction * 1);
+                    if (new_pct > 100) { new_pct = 100; }
+                    if (new_pct < 1)   { new_pct = 1; }
+
+                    g_lamp.fil_saved_pct  = (uint32_t)new_pct;
+                    g_lamp.fil_target_pct = (uint32_t)new_pct;
+                    last_swd_fil_target   = (uint32_t)new_pct;
+
+                    uint8_t byte_val = (uint8_t)((g_lamp.fil_saved_pct * 255U) / 100U);
+                    gled_fade(&fil_led, byte_val, 40);
                 }
-
-                int32_t new_pct = (int32_t)g_lamp.fil_saved_pct + (dim_direction * 2);
-                if (new_pct > 100) { new_pct = 100; }
-                if (new_pct < 1)   { new_pct = 1; }
-
-                g_lamp.fil_saved_pct  = (uint32_t)new_pct;
-                g_lamp.fil_target_pct = (uint32_t)new_pct;
-                last_swd_fil_target   = (uint32_t)new_pct;
-
-                uint8_t byte_val = (uint8_t)((g_lamp.fil_saved_pct * 255U) / 100U);
-                gled_fade(&fil_led, byte_val, 30);
             }
 
-            /* Release after hold: Reverse dim direction for next time */
+            /* Release after hold: Reverse dim direction for next time (down <-> up) */
             if (ubutton_release_step(&touch_btn))
             {
-                dim_direction = -dim_direction;
+                if (g_lamp.fil_state)
+                {
+                    dim_direction = -dim_direction;
+                }
             }
         }
 
@@ -462,6 +476,22 @@ int main(void)
 
                     fh8016_set_state(&disp, g_lamp.bat_percent, g_lamp.disp_bars, 
                                      FH8016_ICON_LIGHTNING, FH8016_COLOR_CYAN, FH8016_COLOR_CYAN);
+                }
+                else if (now < show_bat_until_ms)
+                {
+                    /* BATTERY PREVIEW MODE (1-click, 5 seconds) */
+                    uint8_t b_pct = (uint8_t)g_lamp.bat_percent;
+                    uint8_t bars = (b_pct >= 80) ? 4 : (b_pct >= 60) ? 3 : (b_pct >= 40) ? 2 : (b_pct >= 20) ? 1 : 0;
+                    fh8016_color_t color = (b_pct >= 60) ? FH8016_COLOR_GREEN : 
+                                           (b_pct >= 25) ? FH8016_COLOR_YELLOW : FH8016_COLOR_RED;
+                    g_lamp.disp_power    = 1;
+                    g_lamp.disp_percent  = b_pct;
+                    g_lamp.disp_bars     = bars;
+                    g_lamp.disp_icons    = 0;
+                    g_lamp.disp_hl_left  = color;
+                    g_lamp.disp_hl_right = color;
+
+                    fh8016_set_state(&disp, b_pct, bars, 0, color, color);
                 }
                 else if (g_lamp.fil_state || g_lamp.fil_current_pct > 0)
                 {

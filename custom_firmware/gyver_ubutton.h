@@ -11,7 +11,7 @@
 
 #define UB_DEB_TIME_MS      25U     /* Debounce time in ms */
 #define UB_HOLD_TIME_MS     400U    /* Time before entering hold state in ms */
-#define UB_STEP_PRD_MS      25U     /* Periodic step rate while holding in ms (dimming ramp) */
+#define UB_STEP_PRD_MS      40U     /* Periodic step rate while holding in ms (dimming ramp) */
 #define UB_LONG_HOLD_MS     1200U   /* Time before triggering long press in ms */
 #define UB_CLICK_TIMEOUT_MS 280U    /* Timeout to wait for next click in multi-click in ms */
 
