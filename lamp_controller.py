@@ -1,5 +1,6 @@
 import sys
 import time
+import queue
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, 
     QHBoxLayout, QLabel, QPushButton, QFrame, 
@@ -54,20 +55,21 @@ class SwdWorker(QThread):
     def __init__(self):
         super().__init__()
         self.running = True
-        self.command_queue = []
+        self.command_queue = queue.Queue()
+        self.lamp_base = None
 
     def set_filaments_pct(self, val_100):
-        self.command_queue.append(('FIL_TARGET', max(0, min(100, int(val_100)))))
+        self.command_queue.put(('FIL_TARGET', max(0, min(100, int(val_100)))))
 
     def set_leds_pct(self, val_100):
-        self.command_queue.append(('LED_TARGET', max(0, min(100, int(val_100)))))
+        self.command_queue.put(('LED_TARGET', max(0, min(100, int(val_100)))))
 
     def set_disp_param(self, field, val):
-        self.command_queue.append((field, int(val)))
+        self.command_queue.put((field, int(val)))
 
     def stop(self):
         self.running = False
-        self.wait(2000)
+        self.wait(1000)
 
     def run(self):
         connected = False
@@ -87,29 +89,42 @@ class SwdWorker(QThread):
                     connected = True
                     self.connection_changed.emit(True, "J-Link STLink: Подключено (TIM1 ШИМ + TIM14 Дисплей + АЦП Батареи)")
 
+                # Auto-detect g_lamp base if not yet found
+                if self.lamp_base is None:
+                    try:
+                        probe_block = target.read_memory_block32(0x20000000, 32)
+                        for i in range(len(probe_block) - 24):
+                            if probe_block[i] == 0x50574D31:
+                                self.lamp_base = 0x20000000 + i * 4
+                                break
+                    except Exception:
+                        pass
+
                 # Execute pending write commands to SRAM
-                while self.command_queue:
-                    cmd, val = self.command_queue.pop(0)
+                while not self.command_queue.empty():
+                    cmd, val = self.command_queue.get_nowait()
+                    base = self.lamp_base if self.lamp_base is not None else 0x20000000
                     if cmd == 'FIL_TARGET':
-                        target.write32(ADDR_FIL_TARGET_PCT, val)
+                        target.write32(base + 0x04, val)
                     elif cmd == 'LED_TARGET':
-                        target.write32(ADDR_LED_TARGET_PCT, val)
+                        target.write32(base + 0x18, val)
                     elif cmd == 'DISP_POWER':
-                        target.write32(ADDR_DISP_POWER, val)
+                        target.write32(base + 0x34, val)
                     elif cmd == 'DISP_PERCENT':
-                        target.write32(ADDR_DISP_PERCENT, val)
+                        target.write32(base + 0x38, val)
                     elif cmd == 'DISP_BARS':
-                        target.write32(ADDR_DISP_BARS, val)
+                        target.write32(base + 0x3C, val)
                     elif cmd == 'DISP_ICONS':
-                        target.write32(ADDR_DISP_ICONS, val)
+                        target.write32(base + 0x40, val)
                     elif cmd == 'DISP_COLOR':
-                        target.write32(ADDR_DISP_HL_LEFT, val)
-                        target.write32(ADDR_DISP_HL_RIGHT, val)
+                        target.write32(base + 0x44, val)
+                        target.write32(base + 0x48, val)
                     elif cmd == 'DISP_AUTO':
-                        target.write32(ADDR_DISP_AUTO_SYNC, val)
+                        target.write32(base + 0x4C, val)
 
                 # Read telemetry block (25 x 32-bit words = 100 bytes)
-                data = target.read_memory_block32(ADDR_LAMP_BASE, 25)
+                base = self.lamp_base if self.lamp_base is not None else 0x20000000
+                data = target.read_memory_block32(base, 25)
                 if data[0] == 0x50574D31:
                     telem = {
                         'fil_target': data[1],
@@ -138,6 +153,8 @@ class SwdWorker(QThread):
                         'is_charging':data[24],
                     }
                     self.telemetry_updated.emit(telem)
+                else:
+                    self.lamp_base = None
 
                 self.msleep(40) # ~25 Hz update
 
@@ -152,6 +169,7 @@ class SwdWorker(QThread):
                         pass
                     session = None
                     target = None
+                    self.lamp_base = None
                 self.msleep(1000)
 
         if session:
@@ -186,9 +204,10 @@ class MainWindow(QMainWindow):
         self.worker = SwdWorker()
         self.worker.connection_changed.connect(self.on_connection_changed)
         self.worker.telemetry_updated.connect(self.on_telemetry_updated)
-        self.worker.start()
 
         self.init_ui()
+
+        self.worker.start()
 
     def init_ui(self):
         self.setStyleSheet("""
@@ -744,7 +763,10 @@ class MainWindow(QMainWindow):
         # Update Filaments UI
         if not self.fil_dragging:
             if abs(self.slider_fil.value() - telem['fil_target']) > 1:
+                self.slider_fil.blockSignals(True)
                 self.slider_fil.setValue(telem['fil_target'])
+                self.slider_fil.blockSignals(False)
+                self.lbl_fil_val.setText(f"{telem['fil_target']}%")
 
         self.prog_fil.setValue(telem['fil_curr'])
 
@@ -768,13 +790,22 @@ class MainWindow(QMainWindow):
             self.disp_badge.setStyleSheet("background-color: #242933; color: #8892B0; padding: 3px 10px; border-radius: 5px; font-weight: bold;")
 
         if not self.disp_dragging and telem['disp_auto']:
+            self.slider_disp_pct.blockSignals(True)
             self.slider_disp_pct.setValue(telem['disp_pct'])
+            self.slider_disp_pct.blockSignals(False)
+            self.lbl_disp_num.setText(str(telem['disp_pct']))
+
+            self.cmb_bars.blockSignals(True)
             self.cmb_bars.setCurrentIndex(min(4, telem['disp_bars']))
+            self.cmb_bars.blockSignals(False)
 
         # Update Board LEDs UI
         if not self.led_dragging:
             if abs(self.slider_led.value() - telem['led_target']) > 1:
+                self.slider_led.blockSignals(True)
                 self.slider_led.setValue(telem['led_target'])
+                self.slider_led.blockSignals(False)
+                self.lbl_led_val.setText(f"{telem['led_target']}%")
 
         if telem['led_state'] == 0 and telem['led_curr'] == 0:
             self.led_badge.setText("ВЫКЛ (0% - Полный ноль)")

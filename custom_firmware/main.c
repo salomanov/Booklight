@@ -67,6 +67,7 @@ typedef struct {
     uint32_t is_charging;        // +0x60: 1 = charging, 0 = battery power
 } LampSharedControl_t;
 
+__attribute__((section(".data.00_lamp_shared"), aligned(4)))
 volatile LampSharedControl_t g_lamp = {
     .magic           = 0x50574D31,
     .fil_target_pct  = 0,
@@ -158,7 +159,7 @@ static uint8_t calc_bat_percent(uint16_t mv)
     return 0;
 }
 
-static uint16_t s_filtered_mv = 3300;
+static uint16_t s_filtered_mv; // In .bss (zero-initialized), does not displace .data
 
 static void sample_battery_and_charge(void)
 {
@@ -175,8 +176,15 @@ static void sample_battery_and_charge(void)
         if (raw > 500 && raw < 4095)
         {
             uint32_t inst_mv = (4095UL * 1200UL) / raw;
-            /* Smooth exponential filter: 7/8 previous + 1/8 new */
-            s_filtered_mv = (uint16_t)(((uint32_t)s_filtered_mv * 7 + inst_mv) / 8);
+            if (s_filtered_mv == 0)
+            {
+                s_filtered_mv = (uint16_t)inst_mv;
+            }
+            else
+            {
+                /* Smooth exponential filter: 7/8 previous + 1/8 new */
+                s_filtered_mv = (uint16_t)(((uint32_t)s_filtered_mv * 7 + inst_mv) / 8);
+            }
         }
     }
     g_lamp.bat_millivolts = s_filtered_mv;
