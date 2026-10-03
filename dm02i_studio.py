@@ -15,6 +15,20 @@ try:
     sys.stderr.reconfigure(encoding='utf-8')
 except Exception:
     pass
+import traceback
+
+def log_exception(exc_type, exc_value, exc_tb):
+    err = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+    sys.stderr.write(err)
+    try:
+        log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "studio_error.log")
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(f"\n--- {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n" + err)
+    except Exception:
+        pass
+
+sys.excepthook = log_exception
+
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, 
     QHBoxLayout, QGridLayout, QLabel, QPushButton, QFrame, 
@@ -149,9 +163,8 @@ class SwdWorker(QThread):
                 self.msleep(60)
 
             except Exception as e:
-                if connected:
-                    connected = False
-                    self.connection_changed.emit(False, f"Связь потеряна: {e}")
+                print(f"[SWD Worker Error] {e}")
+                self.connection_changed.emit(False, f"Ошибка: {e}")
                 if session:
                     try:
                         session.close()
