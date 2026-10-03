@@ -72,6 +72,7 @@ class SwdWorker(QThread):
         connected = False
         session = None
         target = None
+        fail_count = 0
 
         while self.running:
             try:
@@ -79,7 +80,7 @@ class SwdWorker(QThread):
                     session = ConnectHelper.session_with_chosen_probe(
                         target_override=TARGET,
                         connect_mode='attach',
-                        options={'auto_unlock': False, 'frequency': 1000000}
+                        options={'auto_unlock': False, 'frequency': 500000}
                     )
                     session.open()
                     target = session.target
@@ -87,7 +88,8 @@ class SwdWorker(QThread):
                         target.selected_core = list(target.cores.values())[0]
                     self.scanner_base = None
                     connected = True
-                    self.connection_changed.emit(True, f"Подключено: {session.probe.description}")
+                    fail_count = 0
+                    self.connection_changed.emit(True, f"Подключено: {session.probe.description} (500 кГц)")
 
                 # Auto-detect scanner memory base
                 if self.scanner_base is None:
@@ -163,20 +165,25 @@ class SwdWorker(QThread):
                         'hb': hb
                     })
 
+                fail_count = 0 # Reset error count on successful read
                 self.msleep(60)
 
             except Exception as e:
-                print(f"[SWD Worker Error] {e}")
-                self.connection_changed.emit(False, f"Ошибка: {e}")
-                if session:
-                    try:
-                        session.close()
-                    except Exception:
-                        pass
-                    session = None
-                    target = None
-                self.scanner_base = None
-                self.msleep(1000)
+                fail_count += 1
+                if fail_count >= 3:
+                    print(f"[SWD Worker Error] {e}")
+                    self.connection_changed.emit(False, f"Ошибка: {e}")
+                    if session:
+                        try:
+                            session.close()
+                        except Exception:
+                            pass
+                        session = None
+                        target = None
+                    self.scanner_base = None
+                    self.msleep(800)
+                else:
+                    self.msleep(80)
 
 class DM02iStudio(QMainWindow):
     def __init__(self):
