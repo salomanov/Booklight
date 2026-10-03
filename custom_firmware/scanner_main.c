@@ -118,10 +118,15 @@ static void set_pair(int high_idx, int low_idx) {
         return;
     }
 
+    /* Voltage safety check */
+    if (g_scanner.vdd_mv > 0 && g_scanner.vdd_mv < 2800) {
+        return; // Low voltage protection
+    }
+
     GPIO_InitTypeDef GPIO_InitStruct = {0};
     GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
     GPIO_InitStruct.Pull  = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW; // Low slew rate = no spikes
 
     /* Set Low pin first */
     HAL_GPIO_WritePin(PINS[low_idx].port, PINS[low_idx].pin, GPIO_PIN_RESET);
@@ -282,7 +287,7 @@ int main(void) {
             last_step_time = 0; // Trigger immediately
         }
 
-        /* 4. Execution Modes */
+        /* 4. Execution Modes: Safe 100 Hz pulsed multiplexing (20% duty cycle) */
         if (g_scanner.mode == 0) {
             /* Mode 0: Auto Charlieplexing Walk */
             if (!g_scanner.is_paused && (millis() - last_step_time >= g_scanner.delay_ms)) {
@@ -291,24 +296,35 @@ int main(void) {
                 get_pair_for_step(g_scanner.step_idx, &h, &l);
                 g_scanner.high_pin_idx = h;
                 g_scanner.low_pin_idx  = l;
-
-                set_pair(h, l);
                 g_scanner.step_idx = (g_scanner.step_idx + 1) % g_scanner.total_steps;
             }
+            /* Pulse pair for 2 ms, then 8 ms High-Z to prevent brownout */
+            set_pair(g_scanner.high_pin_idx, g_scanner.low_pin_idx);
+            delay_ms(2);
+            all_pins_high_z();
+            delay_ms(8);
+
         } else if (g_scanner.mode == 1) {
-            /* Mode 1: Manual Pair Hold */
-            set_pair(g_scanner.cmd_set_high, g_scanner.cmd_set_low);
+            /* Mode 1: Manual Pair Hold (pulsed) */
             g_scanner.high_pin_idx = g_scanner.cmd_set_high;
             g_scanner.low_pin_idx  = g_scanner.cmd_set_low;
+            set_pair(g_scanner.high_pin_idx, g_scanner.low_pin_idx);
+            delay_ms(2);
+            all_pins_high_z();
+            delay_ms(8);
+
         } else if (g_scanner.mode == 2) {
-            /* Mode 2: Single Pin High (rest High-Z) */
-            set_single_high(g_scanner.cmd_set_high);
+            /* Mode 2: Single Pin High (pulsed) */
             g_scanner.high_pin_idx = g_scanner.cmd_set_high;
-        } else if (g_scanner.mode == 3) {
+            set_single_high(g_scanner.high_pin_idx);
+            delay_ms(2);
+            all_pins_high_z();
+            delay_ms(8);
+
+        } else {
             /* Mode 3: All Off */
             all_pins_high_z();
+            delay_ms(10);
         }
-
-        delay_ms(10);
     }
 }

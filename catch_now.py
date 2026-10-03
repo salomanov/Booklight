@@ -9,7 +9,7 @@ try:
 except Exception:
     pass
 
-BIN_PATH = r"c:\Users\Salomanov\Desktop\ВЕЙП\custom_firmware\build\battery_firmware.bin"
+BIN_PATH = r"e:\Проекты\ВЕЙП\custom_firmware\build\scanner.bin"
 
 def log(msg):
     print(msg, flush=True)
@@ -24,9 +24,13 @@ def main():
 
     j = pylink.JLink()
     try:
-        j.open('774496021')
-        j.set_tif(pylink.enums.JLinkInterfaces.SWD)
-        j.set_speed(1000)
+        if j.num_connected_emulators() > 0:
+            try:
+                j.open('774496021')
+            except Exception:
+                j.open()
+            j.set_tif(pylink.enums.JLinkInterfaces.SWD)
+            j.set_speed(1000)
     except Exception as e:
         log(f"[X] Ошибка открытия J-Link: {e}")
         sys.exit(1)
@@ -72,9 +76,13 @@ def main():
     start_detect = time.time()
     caught = False
     attempts = 0
+    last_status = time.time()
 
-    while time.time() - start_detect < 120:
+    while time.time() - start_detect < 300:
         attempts += 1
+        if time.time() - last_status >= 3.0:
+            last_status = time.time()
+            log(f"[*] Ловушка слушает (попыток: {attempts})...")
         try:
             j.coresight_configure()
             dpidr = j.coresight_read(0, ap=False)

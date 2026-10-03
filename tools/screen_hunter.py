@@ -11,19 +11,12 @@ except Exception:
     pass
 
 PIN_NAMES = [
-    "PA0", # 0
-    "PA1", # 1
-    "PA3", # 2
-    "PA4", # 3
-    "PA5", # 4
-    "PA6", # 5
-    "PA7", # 6
-    "PB0", # 7
-    "PB1", # 8
-    "PB2", # 9
-    "PB3", # 10
-    "PB4", # 11
-    "PB5", # 12
+    "PA1", # 0
+    "PA3", # 1
+    "PA4", # 2
+    "PA5", # 3
+    "PA6", # 4
+    "PA7", # 5
 ]
 
 SCANNER_ADDR = 0x20000004
@@ -84,37 +77,37 @@ def main():
             if msvcrt.kbhit():
                 ch = msvcrt.getch().decode('utf-8', errors='ignore').lower()
                 if ch == ' ':
-                    paused = target.read32(SCANNER_ADDR + 0x1C)
-                    target.write32(SCANNER_ADDR + 0x1C, 0 if paused else 1)
+                    paused = target.read32(base + 0x1C)
+                    target.write32(base + 0x1C, 0 if paused else 1)
                     print(f"\n>>> {'[ПАУЗА]' if not paused else '[ВОЗОБНОВЛЕНО]'} <<<")
                 elif ch == 'n':
-                    target.write32(SCANNER_ADDR + 0x30, 1) # cmd_next
+                    target.write32(base + 0x30, 1) # cmd_next
                 elif ch == 'p':
-                    target.write32(SCANNER_ADDR + 0x34, 1) # cmd_prev
+                    target.write32(base + 0x34, 1) # cmd_prev
                 elif ch == '+':
-                    delay = target.read32(SCANNER_ADDR + 0x18)
+                    delay = target.read32(base + 0x18)
                     delay = min(5000, delay + 500)
-                    target.write32(SCANNER_ADDR + 0x18, delay)
+                    target.write32(base + 0x18, delay)
                     print(f"\nЗадержка: {delay} мс")
                 elif ch == '-':
-                    delay = target.read32(SCANNER_ADDR + 0x18)
+                    delay = target.read32(base + 0x18)
                     delay = max(300, delay - 300)
-                    target.write32(SCANNER_ADDR + 0x18, delay)
+                    target.write32(base + 0x18, delay)
                     print(f"\nЗадержка: {delay} мс")
                 elif ch == '1':
-                    target.write32(SCANNER_ADDR + 0x04, 0) # Mode 0: Charlie
+                    target.write32(base + 0x04, 0) # Mode 0: Charlie
                     print("\n>>> Режим: Charlieplexing (пары High/Low)")
                 elif ch == '2':
-                    target.write32(SCANNER_ADDR + 0x04, 2) # Mode 2: Single High
+                    target.write32(base + 0x04, 2) # Mode 2: Single High
                     print("\n>>> Режим: Single Pin High")
                 elif ch == 's':
                     # Pause automatically while noting
-                    target.write32(SCANNER_ADDR + 0x1C, 1)
-                    h_idx = target.read32(SCANNER_ADDR + 0x10)
-                    l_idx = target.read32(SCANNER_ADDR + 0x14)
+                    target.write32(base + 0x1C, 1)
+                    h_idx = target.read32(base + 0x10)
+                    l_idx = target.read32(base + 0x14)
                     h_name = PIN_NAMES[h_idx] if h_idx < len(PIN_NAMES) else f"P{h_idx}"
                     l_name = PIN_NAMES[l_idx] if l_idx < len(PIN_NAMES) else f"P{l_idx}"
-                    cur_s = target.read32(SCANNER_ADDR + 0x08)
+                    cur_s = target.read32(base + 0x08)
                     print(f"\n[ЗАПИСЬ ДЛЯ ШАГА #{cur_s}: HIGH={h_name} (+), LOW={l_name} (-)]")
                     desc = input("Что сейчас светится на экране? > ").strip()
                     if desc:
@@ -122,7 +115,7 @@ def main():
                         with open(LOG_FILE, "a", encoding="utf-8") as f:
                             f.write(line)
                         print(f"[+] Записано в {LOG_FILE}: {line.strip()}")
-                    target.write32(SCANNER_ADDR + 0x1C, 0) # Unpause
+                    target.write32(base + 0x1C, 0) # Unpause
                 elif ch == 'q':
                     break
 
@@ -130,15 +123,15 @@ def main():
             now = time.time()
             if now - last_print >= 0.2:
                 last_print = now
-                step = target.read32(SCANNER_ADDR + 0x08)
-                total = target.read32(SCANNER_ADDR + 0x0C)
-                h_idx = target.read32(SCANNER_ADDR + 0x10)
-                l_idx = target.read32(SCANNER_ADDR + 0x14)
-                delay = target.read32(SCANNER_ADDR + 0x18)
-                paused = target.read32(SCANNER_ADDR + 0x1C)
-                vdd = target.read32(SCANNER_ADDR + 0x28)
-                idr_a = target.read32(SCANNER_ADDR + 0x20)
-                idr_b = target.read32(SCANNER_ADDR + 0x24)
+                step = target.read32(base + 0x08)
+                total = target.read32(base + 0x0C)
+                h_idx = target.read32(base + 0x10)
+                l_idx = target.read32(base + 0x14)
+                delay = target.read32(base + 0x18)
+                paused = target.read32(base + 0x1C)
+                vdd = target.read32(base + 0x28)
+                idr_a = target.read32(base + 0x20)
+                idr_b = target.read32(base + 0x24)
 
                 h_name = PIN_NAMES[h_idx] if h_idx < len(PIN_NAMES) else f"P{h_idx}"
                 l_name = PIN_NAMES[l_idx] if l_idx < len(PIN_NAMES) else f"P{l_idx}"
