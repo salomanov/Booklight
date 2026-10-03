@@ -45,7 +45,7 @@ SCANNER_ADDR = 0x20000004
 TARGET = 'py32f002bx5'
 
 PIN_NAMES = [
-    "PA0", "PA1", "PB0", "PB1", "PB2", "PB3"
+    "PA0", "PA1", "PA3", "PB0", "PB1", "PB2", "PB3", "PB4", "PB5"
 ]
 
 MAP_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dm02i_screen_map.json")
