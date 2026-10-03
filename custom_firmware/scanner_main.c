@@ -46,7 +46,7 @@ volatile ScannerShared_t g_scanner = {
     .magic       = SCANNER_MAGIC,
     .mode        = 0,
     .step_idx    = 0,
-    .total_steps = 72,
+    .total_steps = 90,
     .high_pin_idx= 0,
     .low_pin_idx = 1,
     .delay_ms    = 1000,
@@ -67,20 +67,21 @@ typedef struct {
     uint16_t pin;
 } PinDef_t;
 
-/* Candidate display GPIOs on DM02i V03 (Excludes SWD PA2/PB6 and Coil FETs PA4..PA7, PB7) */
-static const PinDef_t PINS[9] = {
+/* Candidate display GPIOs on DM02i V03 (Excludes SWD PA2/PB6 and Coil FETs PA5..PA7, PB7) */
+static const PinDef_t PINS[10] = {
     {GPIOA, GPIO_PIN_0}, // 0: PA0
     {GPIOA, GPIO_PIN_1}, // 1: PA1
     {GPIOA, GPIO_PIN_3}, // 2: PA3
-    {GPIOB, GPIO_PIN_0}, // 3: PB0
-    {GPIOB, GPIO_PIN_1}, // 4: PB1
-    {GPIOB, GPIO_PIN_2}, // 5: PB2
-    {GPIOB, GPIO_PIN_3}, // 6: PB3
-    {GPIOB, GPIO_PIN_4}, // 7: PB4
-    {GPIOB, GPIO_PIN_5}, // 8: PB5
+    {GPIOA, GPIO_PIN_4}, // 3: PA4
+    {GPIOB, GPIO_PIN_0}, // 4: PB0
+    {GPIOB, GPIO_PIN_1}, // 5: PB1
+    {GPIOB, GPIO_PIN_2}, // 6: PB2
+    {GPIOB, GPIO_PIN_3}, // 7: PB3
+    {GPIOB, GPIO_PIN_4}, // 8: PB4
+    {GPIOB, GPIO_PIN_5}, // 9: PB5
 };
 
-#define NUM_PINS 9
+#define NUM_PINS 10
 
 static volatile uint32_t s_millis = 0;
 
@@ -242,12 +243,12 @@ int main(void) {
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOB_CLK_ENABLE();
 
-    /* Safeguard: keep all FET coil lines (PA4, PA5, PA6, PA7, PB7) as High-Z inputs with NO PULL.
+    /* Safeguard: keep all FET coil lines (PA5, PA6, PA7, PB7) as High-Z inputs with NO PULL.
      * Their external pull-up resistors will hold their gates at VDD, ensuring the heater coil stays 100% OFF. */
     GPIO_InitTypeDef fet_init = {0};
     fet_init.Mode = GPIO_MODE_INPUT;
     fet_init.Pull = GPIO_NOPULL;
-    fet_init.Pin  = GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7;
+    fet_init.Pin  = GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7;
     HAL_GPIO_Init(GPIOA, &fet_init);
 
     fet_init.Pin  = GPIO_PIN_7;
@@ -256,7 +257,7 @@ int main(void) {
     all_pins_high_z();
     adc_init();
 
-    g_scanner.total_steps = NUM_PINS * (NUM_PINS - 1); // 72 steps
+    g_scanner.total_steps = NUM_PINS * (NUM_PINS - 1); // 90 steps
     int init_h = 0, init_l = 1;
     get_pair_for_step(0, &init_h, &init_l);
     g_scanner.high_pin_idx = init_h;
