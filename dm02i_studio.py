@@ -34,7 +34,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout, QGridLayout, QLabel, QPushButton, QFrame, 
     QSlider, QProgressBar, QComboBox, QTableWidget, 
     QTableWidgetItem, QHeaderView, QRadioButton, QButtonGroup,
-    QScrollArea
+    QScrollArea, QLineEdit
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QColor
@@ -365,14 +365,15 @@ class DM02iStudio(QMainWindow):
         self.btn_bar2 = QPushButton("- 2")
         self.btn_bar1 = QPushButton("- 1")
         self.btn_drop = QPushButton("КАПЛЯ")
-        for b in [self.btn_bar3, self.btn_bar2, self.btn_bar1, self.btn_drop]:
-            b.setStyleSheet("background: #0369a1; color: #38bdf8; font-size: 13px; font-weight: bold; min-height: 28px; border-radius: 6px;")
+        self.btn_liquid_oval = QPushButton("ОБОДОК")
+        for b in [self.btn_bar3, self.btn_bar2, self.btn_bar1, self.btn_drop, self.btn_liquid_oval]:
+            b.setStyleSheet("background: #0369a1; color: #38bdf8; font-size: 13px; font-weight: bold; min-height: 24px; border-radius: 6px;")
             b.clicked.connect(lambda ch, btn=b: self.map_element(btn.text()))
             l_layout.addWidget(b)
 
         disp_inner.addWidget(liquid_box)
 
-        # 2. Middle: Lightning + % + Digits (88)
+        # 2. Middle: Lightning + % + Digits (1 + 88)
         mid_box = QVBoxLayout()
         mid_top = QHBoxLayout()
 
@@ -388,9 +389,27 @@ class DM02iStudio(QMainWindow):
         mid_top.addWidget(self.btn_percent)
         mid_box.addLayout(mid_top)
 
-        # Two 7-segment digit representations
+        # Digits row: Hundreds '1' + Two 7-segment digits (Tens and Units)
         digits_row = QHBoxLayout()
         self.digit_btns = {}
+
+        # Hundreds '1' digit (for 100%)
+        hundreds_frame = QFrame()
+        hundreds_frame.setStyleSheet("background: #111827; border: 1px solid #374151; border-radius: 8px; padding: 6px;")
+        h_layout = QVBoxLayout(hundreds_frame)
+        h_layout.setSpacing(3)
+        self.btn_hundreds = QPushButton("1")
+        self.btn_hundreds.setFixedSize(30, 116)
+        self.btn_hundreds.setStyleSheet("background: #1f2937; color: #eab308; font-weight: bold; font-size: 22px; padding: 0; border-radius: 4px;")
+        self.btn_hundreds.clicked.connect(lambda: self.map_element("Символ 1 (сотни)"))
+        h_layout.addWidget(self.btn_hundreds)
+        lbl_h = QLabel("Сотня '1'")
+        lbl_h.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_h.setStyleSheet("color: #9ca3af; font-size: 10px;")
+        h_layout.addWidget(lbl_h)
+        digits_row.addWidget(hundreds_frame)
+
+        digit_labels = {1: "Десятки", 2: "Единицы"}
         for d in [1, 2]:
             d_frame = QFrame()
             d_frame.setStyleSheet("background: #111827; border: 1px solid #374151; border-radius: 8px; padding: 6px;")
@@ -418,9 +437,9 @@ class DM02iStudio(QMainWindow):
                 d_grid.addWidget(b, r, c)
                 self.digit_btns[name] = b
 
-            lbl_d = QLabel(f"Цифра {d}")
+            lbl_d = QLabel(f"Цифра {d} ({digit_labels[d]})")
             lbl_d.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl_d.setStyleSheet("color: #9ca3af; font-size: 11px;")
+            lbl_d.setStyleSheet("color: #9ca3af; font-size: 10px;")
             d_grid.addWidget(lbl_d, 5, 0, 1, 3)
 
             digits_row.addWidget(d_frame)
@@ -429,21 +448,60 @@ class DM02iStudio(QMainWindow):
         disp_inner.addLayout(mid_box)
 
         # 3. Right: Oval with BOOST badge
+        boost_frame = QFrame()
+        boost_frame.setStyleSheet("background: #3b0764; border: 2px solid #a855f7; border-radius: 36px; padding: 8px;")
+        boost_lay = QVBoxLayout(boost_frame)
+        boost_lay.setSpacing(6)
+
         self.btn_boost = QPushButton("BOOST")
         self.btn_boost.setStyleSheet("""
             background-color: #581c87;
             color: #f3e8ff;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: bold;
-            border: 2px solid #a855f7;
-            border-radius: 36px;
-            min-width: 90px;
-            min-height: 120px;
+            border: 1px solid #c084fc;
+            border-radius: 18px;
+            min-width: 80px;
+            min-height: 60px;
         """)
         self.btn_boost.clicked.connect(lambda: self.map_element("Надпись BOOST"))
-        disp_inner.addWidget(self.btn_boost)
+        boost_lay.addWidget(self.btn_boost)
+
+        self.btn_boost_oval = QPushButton("ОБОДОК")
+        self.btn_boost_oval.setStyleSheet("""
+            background-color: #4c1d95;
+            color: #d8b4fe;
+            font-size: 11px;
+            font-weight: bold;
+            border: 1px solid #a855f7;
+            border-radius: 12px;
+            min-height: 24px;
+        """)
+        self.btn_boost_oval.clicked.connect(lambda: self.map_element("Ободок BOOST"))
+        boost_lay.addWidget(self.btn_boost_oval)
+
+        disp_inner.addWidget(boost_frame)
 
         d_layout.addWidget(disp_box)
+
+        # Quick custom element mapping input
+        custom_frame = QFrame()
+        custom_frame.setStyleSheet("background: #0f172a; border: 1px solid #1e293b; border-radius: 6px; padding: 4px 8px;")
+        c_layout = QHBoxLayout(custom_frame)
+        c_layout.setContentsMargins(6, 4, 6, 4)
+        c_lbl = QLabel("Свой элемент:")
+        c_lbl.setStyleSheet("color: #94a3b8; font-size: 12px; font-weight: bold;")
+        c_layout.addWidget(c_lbl)
+        self.txt_custom_name = QLineEdit()
+        self.txt_custom_name.setPlaceholderText("Введи название символа, если его нет на кнопках выше...")
+        self.txt_custom_name.setStyleSheet("background: #1e293b; border: 1px solid #334155; color: #f8fafc; padding: 5px 8px; border-radius: 4px; font-size: 12px;")
+        self.txt_custom_name.returnPressed.connect(self.on_map_custom_element)
+        c_layout.addWidget(self.txt_custom_name)
+        self.btn_custom_map = QPushButton("+ Привязать символ")
+        self.btn_custom_map.setStyleSheet("background: #2563eb; color: #ffffff; font-weight: bold; padding: 5px 14px; border-radius: 4px; font-size: 12px;")
+        self.btn_custom_map.clicked.connect(self.on_map_custom_element)
+        c_layout.addWidget(self.btn_custom_map)
+        d_layout.addWidget(custom_frame)
 
         # Current pair indicator badge
         self.pair_card = QFrame()
@@ -613,6 +671,12 @@ class DM02iStudio(QMainWindow):
         }
         self.save_screen_map()
         self.refresh_table()
+
+    def on_map_custom_element(self):
+        name = self.txt_custom_name.text().strip()
+        if name:
+            self.map_element(name)
+            self.txt_custom_name.clear()
 
     def delete_mapped_element(self, element_name):
         if element_name in self.screen_map:
