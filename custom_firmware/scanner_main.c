@@ -250,6 +250,12 @@ int main(void) {
     adc_init();
 
     g_scanner.total_steps = NUM_PINS * (NUM_PINS - 1); // 30 steps
+    int init_h = 0, init_l = 1;
+    get_pair_for_step(0, &init_h, &init_l);
+    g_scanner.high_pin_idx = init_h;
+    g_scanner.low_pin_idx  = init_l;
+    set_pair(init_h, init_l);
+
     uint32_t last_step_time = millis();
     uint32_t last_adc_time  = millis();
 
@@ -275,7 +281,12 @@ int main(void) {
         if (g_scanner.cmd_next) {
             g_scanner.cmd_next = 0;
             g_scanner.step_idx = (g_scanner.step_idx + 1) % g_scanner.total_steps;
-            last_step_time = 0; // Trigger immediately
+            int h = 0, l = 1;
+            get_pair_for_step(g_scanner.step_idx, &h, &l);
+            g_scanner.high_pin_idx = h;
+            g_scanner.low_pin_idx  = l;
+            set_pair(h, l);
+            last_step_time = millis();
         }
         if (g_scanner.cmd_prev) {
             g_scanner.cmd_prev = 0;
@@ -284,10 +295,15 @@ int main(void) {
             } else {
                 g_scanner.step_idx--;
             }
-            last_step_time = 0; // Trigger immediately
+            int h = 0, l = 1;
+            get_pair_for_step(g_scanner.step_idx, &h, &l);
+            g_scanner.high_pin_idx = h;
+            g_scanner.low_pin_idx  = l;
+            set_pair(h, l);
+            last_step_time = millis();
         }
 
-        /* 4. Execution Modes: Safe 100 Hz pulsed multiplexing (20% duty cycle) */
+        /* 4. Execution Modes: Full brightness continuous drive */
         if (g_scanner.mode == 0) {
             /* Mode 0: Auto Charlieplexing Walk */
             if (!g_scanner.is_paused && (millis() - last_step_time >= g_scanner.delay_ms)) {
@@ -296,35 +312,28 @@ int main(void) {
                 get_pair_for_step(g_scanner.step_idx, &h, &l);
                 g_scanner.high_pin_idx = h;
                 g_scanner.low_pin_idx  = l;
+
+                set_pair(h, l);
                 g_scanner.step_idx = (g_scanner.step_idx + 1) % g_scanner.total_steps;
             }
-            /* Pulse pair for 2 ms, then 8 ms High-Z to prevent brownout */
-            set_pair(g_scanner.high_pin_idx, g_scanner.low_pin_idx);
-            delay_ms(2);
-            all_pins_high_z();
-            delay_ms(8);
-
         } else if (g_scanner.mode == 1) {
-            /* Mode 1: Manual Pair Hold (pulsed) */
-            g_scanner.high_pin_idx = g_scanner.cmd_set_high;
-            g_scanner.low_pin_idx  = g_scanner.cmd_set_low;
-            set_pair(g_scanner.high_pin_idx, g_scanner.low_pin_idx);
-            delay_ms(2);
-            all_pins_high_z();
-            delay_ms(8);
-
+            /* Mode 1: Manual Pair Hold */
+            if (g_scanner.high_pin_idx != g_scanner.cmd_set_high || g_scanner.low_pin_idx != g_scanner.cmd_set_low) {
+                g_scanner.high_pin_idx = g_scanner.cmd_set_high;
+                g_scanner.low_pin_idx  = g_scanner.cmd_set_low;
+                set_pair(g_scanner.high_pin_idx, g_scanner.low_pin_idx);
+            }
         } else if (g_scanner.mode == 2) {
-            /* Mode 2: Single Pin High (pulsed) */
-            g_scanner.high_pin_idx = g_scanner.cmd_set_high;
-            set_single_high(g_scanner.high_pin_idx);
-            delay_ms(2);
-            all_pins_high_z();
-            delay_ms(8);
-
+            /* Mode 2: Single Pin High */
+            if (g_scanner.high_pin_idx != g_scanner.cmd_set_high) {
+                g_scanner.high_pin_idx = g_scanner.cmd_set_high;
+                set_single_high(g_scanner.high_pin_idx);
+            }
         } else {
             /* Mode 3: All Off */
             all_pins_high_z();
-            delay_ms(10);
         }
+
+        delay_ms(10);
     }
 }
