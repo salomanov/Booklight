@@ -102,26 +102,29 @@ class SwdWorker(QThread):
 
                 base = self.scanner_base if self.scanner_base is not None else SCANNER_ADDR
 
-                # Process commands from GUI
+                # Process commands from GUI safely
                 while not self.command_queue.empty():
                     cmd, val = self.command_queue.get_nowait()
-                    if cmd == 'PAUSE':
-                        target.write32(base + 0x1C, int(val))
-                    elif cmd == 'MODE':
-                        target.write32(base + 0x04, int(val))
-                    elif cmd == 'DELAY':
-                        target.write32(base + 0x18, int(val))
-                    elif cmd == 'NEXT':
-                        target.write32(base + 0x30, 1)
-                    elif cmd == 'PREV':
-                        target.write32(base + 0x34, 1)
-                    elif cmd == 'SET_HIGH':
-                        target.write32(base + 0x38, int(val))
-                    elif cmd == 'SET_LOW':
-                        target.write32(base + 0x3C, int(val))
-                    elif cmd == 'SET_STEP':
-                        target.write32(base + 0x08, int(val))
-                        target.write32(base + 0x30, 1) # trigger refresh
+                    try:
+                        if cmd == 'PAUSE':
+                            target.write32(base + 0x1C, int(val))
+                        elif cmd == 'MODE':
+                            target.write32(base + 0x04, int(val))
+                        elif cmd == 'DELAY':
+                            target.write32(base + 0x18, int(val))
+                        elif cmd == 'NEXT':
+                            target.write32(base + 0x30, 1)
+                        elif cmd == 'PREV':
+                            target.write32(base + 0x34, 1)
+                        elif cmd == 'SET_HIGH':
+                            target.write32(base + 0x38, int(val))
+                        elif cmd == 'SET_LOW':
+                            target.write32(base + 0x3C, int(val))
+                        elif cmd == 'SET_STEP':
+                            target.write32(base + 0x08, int(val))
+                            target.write32(base + 0x30, 1) # trigger refresh
+                    except Exception as cmd_err:
+                        print(f"[SWD Command Warning] {cmd}: {cmd_err}")
 
                 # Read telemetry
                 magic = target.read32(base + 0x00)
@@ -379,11 +382,11 @@ class DM02iStudio(QMainWindow):
 
         self.btn_lightning = QPushButton("МОЛНИЯ")
         self.btn_lightning.setStyleSheet("background: #ca8a04; color: #fef08a; font-weight: bold; font-size: 13px; border-radius: 6px; padding: 6px 12px;")
-        self.btn_lightning.clicked.connect(lambda: self.map_element("Молния"))
+        self.btn_lightning.clicked.connect(lambda *args: self.map_element("Молния"))
 
         self.btn_percent = QPushButton("ПРОЦЕНТ %")
         self.btn_percent.setStyleSheet("background: #15803d; color: #86efac; font-weight: bold; font-size: 13px; border-radius: 6px; padding: 6px 12px;")
-        self.btn_percent.clicked.connect(lambda: self.map_element("Процент %"))
+        self.btn_percent.clicked.connect(lambda *args: self.map_element("Процент %"))
 
         mid_top.addWidget(self.btn_lightning)
         mid_top.addWidget(self.btn_percent)
@@ -403,20 +406,20 @@ class DM02iStudio(QMainWindow):
         self.btn_hundreds_top.setFixedSize(30, 44)
         self.btn_hundreds_top.setStyleSheet("background: #1f2937; color: #eab308; font-weight: bold; font-size: 13px; padding: 0; border-radius: 4px;")
         self.btn_hundreds_top.setToolTip("Верхний сегмент единицы сотен")
-        self.btn_hundreds_top.clicked.connect(lambda: self.map_element("Сотня 1 (Верх)"))
+        self.btn_hundreds_top.clicked.connect(lambda *args: self.map_element("Сотня 1 (Верх)"))
         h_layout.addWidget(self.btn_hundreds_top)
 
         self.btn_hundreds_bot = QPushButton("1▼")
         self.btn_hundreds_bot.setFixedSize(30, 44)
         self.btn_hundreds_bot.setStyleSheet("background: #1f2937; color: #eab308; font-weight: bold; font-size: 13px; padding: 0; border-radius: 4px;")
         self.btn_hundreds_bot.setToolTip("Нижний сегмент единицы сотен")
-        self.btn_hundreds_bot.clicked.connect(lambda: self.map_element("Сотня 1 (Низ)"))
+        self.btn_hundreds_bot.clicked.connect(lambda *args: self.map_element("Сотня 1 (Низ)"))
         h_layout.addWidget(self.btn_hundreds_bot)
 
         self.btn_hundreds_all = QPushButton("1 Вся")
         self.btn_hundreds_all.setFixedSize(30, 24)
         self.btn_hundreds_all.setStyleSheet("background: #374151; color: #facc15; font-size: 9px; padding: 0; border-radius: 3px;")
-        self.btn_hundreds_all.clicked.connect(lambda: self.map_element("Сотня 1 (Вся)"))
+        self.btn_hundreds_all.clicked.connect(lambda *args: self.map_element("Сотня 1 (Вся)"))
         h_layout.addWidget(self.btn_hundreds_all)
 
         lbl_h = QLabel("Сотня")
@@ -500,12 +503,12 @@ class DM02iStudio(QMainWindow):
 
         self.btn_boost_oval = QPushButton("ОБОДОК BOOST")
         self.btn_boost_oval.setStyleSheet("background-color: #4c1d95; color: #d8b4fe; font-size: 11px; font-weight: bold; border: 1px solid #a855f7; border-radius: 4px; min-height: 22px;")
-        self.btn_boost_oval.clicked.connect(lambda: self.map_element("Ободок BOOST"))
+        self.btn_boost_oval.clicked.connect(lambda *args: self.map_element("Ободок BOOST"))
         boost_lay.addWidget(self.btn_boost_oval)
 
         self.btn_boost_all = QPushButton("ВЕСЬ BOOST")
         self.btn_boost_all.setStyleSheet("background-color: #7e22ce; color: #ffffff; font-size: 11px; font-weight: bold; border: 1px solid #c084fc; border-radius: 4px; min-height: 24px;")
-        self.btn_boost_all.clicked.connect(lambda: self.map_element("Надпись BOOST"))
+        self.btn_boost_all.clicked.connect(lambda *args: self.map_element("Надпись BOOST"))
         boost_lay.addWidget(self.btn_boost_all)
 
         disp_inner.addWidget(boost_frame)
@@ -565,10 +568,10 @@ class DM02iStudio(QMainWindow):
         self.btn_pause.clicked.connect(self.toggle_pause)
 
         self.btn_prev = QPushButton("< Назад")
-        self.btn_prev.clicked.connect(lambda: self.worker.send_cmd('PREV', 1))
+        self.btn_prev.clicked.connect(lambda *args: self.worker.send_cmd('PREV', 1))
 
         self.btn_next = QPushButton("Вперед >")
-        self.btn_next.clicked.connect(lambda: self.worker.send_cmd('NEXT', 1))
+        self.btn_next.clicked.connect(lambda *args: self.worker.send_cmd('NEXT', 1))
 
         btn_row.addWidget(self.btn_prev)
         btn_row.addWidget(self.btn_pause)
@@ -594,9 +597,9 @@ class DM02iStudio(QMainWindow):
         self.radio_off     = QRadioButton("Все Выкл")
         self.radio_charlie.setChecked(True)
 
-        self.radio_charlie.toggled.connect(lambda: self.worker.send_cmd('MODE', 0) if self.radio_charlie.isChecked() else None)
-        self.radio_single.toggled.connect(lambda: self.worker.send_cmd('MODE', 2) if self.radio_single.isChecked() else None)
-        self.radio_off.toggled.connect(lambda: self.worker.send_cmd('MODE', 3) if self.radio_off.isChecked() else None)
+        self.radio_charlie.toggled.connect(lambda *args: self.worker.send_cmd('MODE', 0) if self.radio_charlie.isChecked() else None)
+        self.radio_single.toggled.connect(lambda *args: self.worker.send_cmd('MODE', 2) if self.radio_single.isChecked() else None)
+        self.radio_off.toggled.connect(lambda *args: self.worker.send_cmd('MODE', 3) if self.radio_off.isChecked() else None)
 
         mode_row.addWidget(self.radio_charlie)
         mode_row.addWidget(self.radio_single)
