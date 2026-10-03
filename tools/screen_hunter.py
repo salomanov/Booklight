@@ -11,12 +11,7 @@ except Exception:
     pass
 
 PIN_NAMES = [
-    "PA1", # 0
-    "PA3", # 1
-    "PA4", # 2
-    "PA5", # 3
-    "PA6", # 4
-    "PA7", # 5
+    "PA0", "PA1", "PA3", "PB0", "PB1", "PB2", "PB3", "PB4", "PB5"
 ]
 
 SCANNER_ADDR = 0x20000004
