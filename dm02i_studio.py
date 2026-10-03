@@ -9,6 +9,12 @@ import os
 import time
 import queue
 import json
+
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+except Exception:
+    pass
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, 
     QHBoxLayout, QGridLayout, QLabel, QPushButton, QFrame, 
@@ -25,8 +31,7 @@ SCANNER_ADDR = 0x20000004
 TARGET = 'py32f002bx5'
 
 PIN_NAMES = [
-    "PA0", "PA1", "PA3", "PA4", "PA5", "PA6", "PA7",
-    "PB0", "PB1", "PB2", "PB3", "PB4", "PB5"
+    "PA1", "PA3", "PA4", "PA5", "PA6", "PA7"
 ]
 
 MAP_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dm02i_screen_map.json")
@@ -47,6 +52,8 @@ class SwdWorker(QThread):
         self.running = False
         self.wait(1000)
 
+        self.scanner_base = None
+
     def run(self):
         connected = False
         session = None
@@ -62,45 +69,61 @@ class SwdWorker(QThread):
                     )
                     session.open()
                     target = session.target
+                    if target.selected_core is None and target.cores:
+                        target.selected_core = list(target.cores.values())[0]
+                    self.scanner_base = None
                     connected = True
                     self.connection_changed.emit(True, f"Подключено: {session.probe.description}")
+
+                # Auto-detect scanner memory base
+                if self.scanner_base is None:
+                    try:
+                        probe = target.read_memory_block32(0x20000000, 32)
+                        for i, val in enumerate(probe):
+                            if val == 0x5343414E:
+                                self.scanner_base = 0x20000000 + i * 4
+                                break
+                    except Exception:
+                        pass
+
+                base = self.scanner_base if self.scanner_base is not None else SCANNER_ADDR
 
                 # Process commands from GUI
                 while not self.command_queue.empty():
                     cmd, val = self.command_queue.get_nowait()
                     if cmd == 'PAUSE':
-                        target.write32(SCANNER_ADDR + 0x1C, int(val))
+                        target.write32(base + 0x1C, int(val))
                     elif cmd == 'MODE':
-                        target.write32(SCANNER_ADDR + 0x04, int(val))
+                        target.write32(base + 0x04, int(val))
                     elif cmd == 'DELAY':
-                        target.write32(SCANNER_ADDR + 0x18, int(val))
+                        target.write32(base + 0x18, int(val))
                     elif cmd == 'NEXT':
-                        target.write32(SCANNER_ADDR + 0x30, 1)
+                        target.write32(base + 0x30, 1)
                     elif cmd == 'PREV':
-                        target.write32(SCANNER_ADDR + 0x34, 1)
+                        target.write32(base + 0x34, 1)
                     elif cmd == 'SET_HIGH':
-                        target.write32(SCANNER_ADDR + 0x38, int(val))
+                        target.write32(base + 0x38, int(val))
                     elif cmd == 'SET_LOW':
-                        target.write32(SCANNER_ADDR + 0x3C, int(val))
+                        target.write32(base + 0x3C, int(val))
                     elif cmd == 'SET_STEP':
-                        target.write32(SCANNER_ADDR + 0x08, int(val))
-                        target.write32(SCANNER_ADDR + 0x30, 1) # trigger refresh
+                        target.write32(base + 0x08, int(val))
+                        target.write32(base + 0x30, 1) # trigger refresh
 
                 # Read telemetry
-                magic = target.read32(SCANNER_ADDR + 0x00)
+                magic = target.read32(base + 0x00)
                 if magic == 0x5343414E: # 'SCAN'
-                    mode    = target.read32(SCANNER_ADDR + 0x04)
-                    step    = target.read32(SCANNER_ADDR + 0x08)
-                    total   = target.read32(SCANNER_ADDR + 0x0C)
-                    h_idx   = target.read32(SCANNER_ADDR + 0x10)
-                    l_idx   = target.read32(SCANNER_ADDR + 0x14)
-                    delay   = target.read32(SCANNER_ADDR + 0x18)
-                    paused  = target.read32(SCANNER_ADDR + 0x1C)
-                    idr_a   = target.read32(SCANNER_ADDR + 0x20)
-                    idr_b   = target.read32(SCANNER_ADDR + 0x24)
-                    vdd_mv  = target.read32(SCANNER_ADDR + 0x28)
-                    raw_adc = target.read32(SCANNER_ADDR + 0x2C)
-                    hb      = target.read32(SCANNER_ADDR + 0x40)
+                    mode    = target.read32(base + 0x04)
+                    step    = target.read32(base + 0x08)
+                    total   = target.read32(base + 0x0C)
+                    h_idx   = target.read32(base + 0x10)
+                    l_idx   = target.read32(base + 0x14)
+                    delay   = target.read32(base + 0x18)
+                    paused  = target.read32(base + 0x1C)
+                    idr_a   = target.read32(base + 0x20)
+                    idr_b   = target.read32(base + 0x24)
+                    vdd_mv  = target.read32(base + 0x28)
+                    raw_adc = target.read32(base + 0x2C)
+                    hb      = target.read32(base + 0x40)
 
                     h_name = PIN_NAMES[h_idx] if h_idx < len(PIN_NAMES) else f"P{h_idx}"
                     l_name = PIN_NAMES[l_idx] if l_idx < len(PIN_NAMES) else f"P{l_idx}"
@@ -136,6 +159,7 @@ class SwdWorker(QThread):
                         pass
                     session = None
                     target = None
+                self.scanner_base = None
                 self.msleep(1000)
 
 class DM02iStudio(QMainWindow):
@@ -270,7 +294,7 @@ class DM02iStudio(QMainWindow):
         h_layout = QHBoxLayout(header)
         h_layout.setContentsMargins(8, 4, 8, 4)
 
-        self.lbl_status = QLabel("● Поиск программатора...")
+        self.lbl_status = QLabel("[*] Поиск программатора...")
         self.lbl_status.setStyleSheet("color: #f59e0b; font-weight: bold; font-size: 14px;")
 
         self.lbl_vtarget = QLabel("АКБ / VDD: -- В")
@@ -303,7 +327,7 @@ class DM02iStudio(QMainWindow):
         card_display.setProperty("class", "card")
         d_layout = QVBoxLayout(card_display)
 
-        t_lbl = QLabel("📱 ВИРТУАЛЬНЫЙ ДИСПЛЕЙ DM02i (НАЖМИ НА ЭЛЕМЕНТ ДЛЯ ПРИВЯЗКИ)")
+        t_lbl = QLabel("ВИРТУАЛЬНЫЙ ДИСПЛЕЙ DM02i (НАЖМИ НА ЭЛЕМЕНТ ДЛЯ ПРИВЯЗКИ)")
         t_lbl.setProperty("class", "cardTitle")
         d_layout.addWidget(t_lbl)
 
@@ -324,10 +348,10 @@ class DM02iStudio(QMainWindow):
         l_layout = QVBoxLayout(liquid_box)
         l_layout.setSpacing(6)
 
-        self.btn_bar3 = QPushButton("▬ 3")
-        self.btn_bar2 = QPushButton("▬ 2")
-        self.btn_bar1 = QPushButton("▬ 1")
-        self.btn_drop = QPushButton("💧")
+        self.btn_bar3 = QPushButton("- 3")
+        self.btn_bar2 = QPushButton("- 2")
+        self.btn_bar1 = QPushButton("- 1")
+        self.btn_drop = QPushButton("КАПЛЯ")
         for b in [self.btn_bar3, self.btn_bar2, self.btn_bar1, self.btn_drop]:
             b.setStyleSheet("background: #0369a1; color: #38bdf8; font-size: 13px; font-weight: bold; min-height: 28px; border-radius: 6px;")
             b.clicked.connect(lambda ch, btn=b: self.map_element(btn.text()))
@@ -339,13 +363,13 @@ class DM02iStudio(QMainWindow):
         mid_box = QVBoxLayout()
         mid_top = QHBoxLayout()
 
-        self.btn_lightning = QPushButton("⚡ МОЛНИЯ")
+        self.btn_lightning = QPushButton("МОЛНИЯ")
         self.btn_lightning.setStyleSheet("background: #ca8a04; color: #fef08a; font-weight: bold; font-size: 13px; border-radius: 6px; padding: 6px 12px;")
-        self.btn_lightning.clicked.connect(lambda: self.map_element("⚡ Молния"))
+        self.btn_lightning.clicked.connect(lambda: self.map_element("Молния"))
 
-        self.btn_percent = QPushButton("% ПРОЦЕНТ")
+        self.btn_percent = QPushButton("ПРОЦЕНТ %")
         self.btn_percent.setStyleSheet("background: #15803d; color: #86efac; font-weight: bold; font-size: 13px; border-radius: 6px; padding: 6px 12px;")
-        self.btn_percent.clicked.connect(lambda: self.map_element("% Процент"))
+        self.btn_percent.clicked.connect(lambda: self.map_element("Процент %"))
 
         mid_top.addWidget(self.btn_lightning)
         mid_top.addWidget(self.btn_percent)
@@ -414,7 +438,7 @@ class DM02iStudio(QMainWindow):
         p_lay = QVBoxLayout(self.pair_card)
         self.lbl_pair_title = QLabel("АКТИВНЫЙ ШАГ СКАНИРОВАНИЯ:")
         self.lbl_pair_title.setStyleSheet("color: #94a3b8; font-size: 12px; font-weight: bold;")
-        self.lbl_pair_value = QLabel("HIGH: PA0 (+3.3V) ➔ LOW: PA1 (GND)")
+        self.lbl_pair_value = QLabel("HIGH: PA0 (+3.3V) -> LOW: PA1 (GND)")
         self.lbl_pair_value.setStyleSheet("color: #38bdf8; font-size: 20px; font-weight: bold;")
         p_lay.addWidget(self.lbl_pair_title)
         p_lay.addWidget(self.lbl_pair_value)
@@ -431,20 +455,20 @@ class DM02iStudio(QMainWindow):
         card_ctrl.setProperty("class", "card")
         c_layout = QVBoxLayout(card_ctrl)
 
-        ctrl_title = QLabel("⚙ УПРАВЛЕНИЕ СКАНИРОВАНИЕМ")
+        ctrl_title = QLabel("УПРАВЛЕНИЕ СКАНИРОВАНИЕМ")
         ctrl_title.setProperty("class", "cardTitle")
         c_layout.addWidget(ctrl_title)
 
         # Buttons row: Play/Pause, Next, Prev
         btn_row = QHBoxLayout()
-        self.btn_pause = QPushButton("⏸ ПАУЗА")
+        self.btn_pause = QPushButton("[II] ПАУЗА")
         self.btn_pause.setProperty("class", "primary")
         self.btn_pause.clicked.connect(self.toggle_pause)
 
-        self.btn_prev = QPushButton("◀ Назад")
+        self.btn_prev = QPushButton("< Назад")
         self.btn_prev.clicked.connect(lambda: self.worker.send_cmd('PREV', 1))
 
-        self.btn_next = QPushButton("Вперёд ▶")
+        self.btn_next = QPushButton("Вперед >")
         self.btn_next.clicked.connect(lambda: self.worker.send_cmd('NEXT', 1))
 
         btn_row.addWidget(self.btn_prev)
@@ -507,7 +531,7 @@ class DM02iStudio(QMainWindow):
         card_table.setProperty("class", "card")
         t_layout = QVBoxLayout(card_table)
 
-        tbl_title = QLabel("📋 КАРТА НАЙДЕННЫХ СЕГМЕНТОВ (СОХРАНЯЕТСЯ В JSON)")
+        tbl_title = QLabel("КАРТА НАЙДЕННЫХ СЕГМЕНТОВ (СОХРАНЯЕТСЯ В JSON)")
         tbl_title.setProperty("class", "cardTitle")
         t_layout.addWidget(tbl_title)
 
@@ -522,10 +546,10 @@ class DM02iStudio(QMainWindow):
 
         # Action buttons: Export / Clear
         act_row = QHBoxLayout()
-        btn_save = QPushButton("💾 Сохранить карту в C-драйвер")
+        btn_save = QPushButton("Сохранить карту в C-драйвер")
         btn_save.clicked.connect(self.export_c_driver)
 
-        btn_clear = QPushButton("🗑 Очистить карту")
+        btn_clear = QPushButton("Очистить карту")
         btn_clear.setProperty("class", "danger")
         btn_clear.clicked.connect(self.clear_map)
 
@@ -544,11 +568,11 @@ class DM02iStudio(QMainWindow):
         cur_text = self.btn_pause.text()
         if "ПАУЗА" in cur_text:
             self.worker.send_cmd('PAUSE', 1)
-            self.btn_pause.setText("▶ СТАРТ")
+            self.btn_pause.setText("[>] СТАРТ")
             self.btn_pause.setStyleSheet("background-color: #16a34a;")
         else:
             self.worker.send_cmd('PAUSE', 0)
-            self.btn_pause.setText("⏸ ПАУЗА")
+            self.btn_pause.setText("[II] ПАУЗА")
             self.btn_pause.setStyleSheet("background-color: #0284c7;")
 
     def on_speed_changed(self, val):
@@ -564,7 +588,7 @@ class DM02iStudio(QMainWindow):
         self.worker.send_cmd('MODE', 1) # Mode 1: Manual Pair
         self.worker.send_cmd('SET_HIGH', h)
         self.worker.send_cmd('SET_LOW', l)
-        self.btn_pause.setText("▶ ВОЗОБНОВИТЬ АВТО")
+        self.btn_pause.setText("[>] ВОЗОБНОВИТЬ АВТО")
 
     def map_element(self, element_name):
         # Bind current active pair to element
@@ -596,7 +620,7 @@ class DM02iStudio(QMainWindow):
             self.table.setItem(row, 1, QTableWidgetItem(data['high']))
             self.table.setItem(row, 2, QTableWidgetItem(data['low']))
             
-            btn_del = QPushButton("✕")
+            btn_del = QPushButton("X")
             btn_del.setFixedSize(28, 24)
             btn_del.setStyleSheet("background: #be123c; color: white; padding: 0; font-weight: bold;")
             btn_del.clicked.connect(lambda ch, n=name: self.delete_mapped_element(n))
@@ -620,10 +644,10 @@ class DM02iStudio(QMainWindow):
 
     def on_connection_changed(self, connected, text):
         if connected:
-            self.lbl_status.setText(f"● {text}")
+            self.lbl_status.setText(f"[*] {text}")
             self.lbl_status.setStyleSheet("color: #10b981; font-weight: bold; font-size: 14px;")
         else:
-            self.lbl_status.setText(f"● {text}")
+            self.lbl_status.setText(f"[*] {text}")
             self.lbl_status.setStyleSheet("color: #ef4444; font-weight: bold; font-size: 14px;")
 
     def on_telemetry_updated(self, d):
@@ -641,14 +665,14 @@ class DM02iStudio(QMainWindow):
 
         # Display pair banner
         self.lbl_pair_title.setText(f"АКТИВНЫЙ ШАГ #{d['step']}/{d['total']}:")
-        self.lbl_pair_value.setText(f"HIGH: {d['h_name']} (+3.3V)  ➔  LOW: {d['l_name']} (GND)")
+        self.lbl_pair_value.setText(f"HIGH: {d['h_name']} (+3.3V)  ->  LOW: {d['l_name']} (GND)")
 
         # Sync button text if paused externally
         if d['paused']:
-            self.btn_pause.setText("▶ СТАРТ")
+            self.btn_pause.setText("[>] СТАРТ")
             self.btn_pause.setStyleSheet("background-color: #16a34a;")
         else:
-            self.btn_pause.setText("⏸ ПАУЗА")
+            self.btn_pause.setText("[II] ПАУЗА")
             self.btn_pause.setStyleSheet("background-color: #0284c7;")
 
 def main():

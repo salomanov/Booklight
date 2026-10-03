@@ -67,24 +67,17 @@ typedef struct {
     uint16_t pin;
 } PinDef_t;
 
-/* 13 available GPIOs on QFN-20 (PA2 and PB6 reserved for SWD!) */
-static const PinDef_t PINS[13] = {
-    {GPIOA, GPIO_PIN_0}, // 0: PA0
-    {GPIOA, GPIO_PIN_1}, // 1: PA1
-    {GPIOA, GPIO_PIN_3}, // 2: PA3
-    {GPIOA, GPIO_PIN_4}, // 3: PA4
-    {GPIOA, GPIO_PIN_5}, // 4: PA5
-    {GPIOA, GPIO_PIN_6}, // 5: PA6
-    {GPIOA, GPIO_PIN_7}, // 6: PA7
-    {GPIOB, GPIO_PIN_0}, // 7: PB0
-    {GPIOB, GPIO_PIN_1}, // 8: PB1
-    {GPIOB, GPIO_PIN_2}, // 9: PB2
-    {GPIOB, GPIO_PIN_3}, // 10: PB3
-    {GPIOB, GPIO_PIN_4}, // 11: PB4
-    {GPIOB, GPIO_PIN_5}, // 12: PB5
+/* Exactly the 6 GPIOs routed to the 6-pin display connector on DM02i V03 */
+static const PinDef_t PINS[6] = {
+    {GPIOA, GPIO_PIN_1}, // 0: PA1
+    {GPIOA, GPIO_PIN_3}, // 1: PA3
+    {GPIOA, GPIO_PIN_4}, // 2: PA4
+    {GPIOA, GPIO_PIN_5}, // 3: PA5
+    {GPIOA, GPIO_PIN_6}, // 4: PA6
+    {GPIOA, GPIO_PIN_7}, // 5: PA7
 };
 
-#define NUM_PINS 13
+#define NUM_PINS 6
 
 static volatile uint32_t s_millis = 0;
 
@@ -241,10 +234,17 @@ int main(void) {
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOB_CLK_ENABLE();
 
+    /* Configure all Port B pins as safe Inputs with Pull-up (switches & sensors) */
+    GPIO_InitTypeDef b_init = {0};
+    b_init.Pin  = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5;
+    b_init.Mode = GPIO_MODE_INPUT;
+    b_init.Pull = GPIO_PULLUP;
+    HAL_GPIO_Init(GPIOB, &b_init);
+
     all_pins_high_z();
     adc_init();
 
-    g_scanner.total_steps = NUM_PINS * (NUM_PINS - 1); // 156
+    g_scanner.total_steps = NUM_PINS * (NUM_PINS - 1); // 30 steps
     uint32_t last_step_time = millis();
     uint32_t last_adc_time  = millis();
 

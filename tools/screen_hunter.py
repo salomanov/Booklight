@@ -42,11 +42,23 @@ def main():
         )
         session.open()
         target = session.target
+        if target.selected_core is None and target.cores:
+            target.selected_core = list(target.cores.values())[0]
     except Exception as e:
         print(f"[X] Ошибка подключения к плате: {e}")
         sys.exit(1)
 
-    magic = target.read32(SCANNER_ADDR)
+    base = SCANNER_ADDR
+    try:
+        probe = target.read_memory_block32(0x20000000, 32)
+        for i, val in enumerate(probe):
+            if val == 0x5343414E:
+                base = 0x20000000 + i * 4
+                break
+    except Exception:
+        pass
+
+    magic = target.read32(base)
     if magic != 0x5343414E:
         print(f"[!] Внимание: Сигнатура 'SCAN' не найдена (прочитано: 0x{magic:08X})")
         print("    Убедитесь, что прошивка scanner.bin запущена.")
