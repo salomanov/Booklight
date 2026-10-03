@@ -1,0 +1,661 @@
+# -*- coding: utf-8 -*-
+"""
+DM02i Studio - Графическая среда управления и картографирования дисплея платы вейпа DM02i V03
+MCU: Puya PY32C642 / PY32F002Bx5 (ARM Cortex-M0+ @ 24MHz)
+"""
+
+import sys
+import os
+import time
+import queue
+import json
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, 
+    QHBoxLayout, QGridLayout, QLabel, QPushButton, QFrame, 
+    QSlider, QProgressBar, QComboBox, QTableWidget, 
+    QTableWidgetItem, QHeaderView, QRadioButton, QButtonGroup,
+    QScrollArea
+)
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
+from PyQt6.QtGui import QFont, QColor
+from pyocd.core.helpers import ConnectHelper
+
+# Shared memory in SRAM
+SCANNER_ADDR = 0x20000004
+TARGET = 'py32f002bx5'
+
+PIN_NAMES = [
+    "PA0", "PA1", "PA3", "PA4", "PA5", "PA6", "PA7",
+    "PB0", "PB1", "PB2", "PB3", "PB4", "PB5"
+]
+
+MAP_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dm02i_screen_map.json")
+
+class SwdWorker(QThread):
+    connection_changed = pyqtSignal(bool, str)
+    telemetry_updated  = pyqtSignal(dict)
+
+    def __init__(self):
+        super().__init__()
+        self.running = True
+        self.command_queue = queue.Queue()
+
+    def send_cmd(self, cmd_type, value):
+        self.command_queue.put((cmd_type, value))
+
+    def stop(self):
+        self.running = False
+        self.wait(1000)
+
+    def run(self):
+        connected = False
+        session = None
+        target = None
+
+        while self.running:
+            try:
+                if session is None:
+                    session = ConnectHelper.session_with_chosen_probe(
+                        target_override=TARGET,
+                        connect_mode='attach',
+                        options={'auto_unlock': False, 'frequency': 1000000}
+                    )
+                    session.open()
+                    target = session.target
+                    connected = True
+                    self.connection_changed.emit(True, f"Подключено: {session.probe.description}")
+
+                # Process commands from GUI
+                while not self.command_queue.empty():
+                    cmd, val = self.command_queue.get_nowait()
+                    if cmd == 'PAUSE':
+                        target.write32(SCANNER_ADDR + 0x1C, int(val))
+                    elif cmd == 'MODE':
+                        target.write32(SCANNER_ADDR + 0x04, int(val))
+                    elif cmd == 'DELAY':
+                        target.write32(SCANNER_ADDR + 0x18, int(val))
+                    elif cmd == 'NEXT':
+                        target.write32(SCANNER_ADDR + 0x30, 1)
+                    elif cmd == 'PREV':
+                        target.write32(SCANNER_ADDR + 0x34, 1)
+                    elif cmd == 'SET_HIGH':
+                        target.write32(SCANNER_ADDR + 0x38, int(val))
+                    elif cmd == 'SET_LOW':
+                        target.write32(SCANNER_ADDR + 0x3C, int(val))
+                    elif cmd == 'SET_STEP':
+                        target.write32(SCANNER_ADDR + 0x08, int(val))
+                        target.write32(SCANNER_ADDR + 0x30, 1) # trigger refresh
+
+                # Read telemetry
+                magic = target.read32(SCANNER_ADDR + 0x00)
+                if magic == 0x5343414E: # 'SCAN'
+                    mode    = target.read32(SCANNER_ADDR + 0x04)
+                    step    = target.read32(SCANNER_ADDR + 0x08)
+                    total   = target.read32(SCANNER_ADDR + 0x0C)
+                    h_idx   = target.read32(SCANNER_ADDR + 0x10)
+                    l_idx   = target.read32(SCANNER_ADDR + 0x14)
+                    delay   = target.read32(SCANNER_ADDR + 0x18)
+                    paused  = target.read32(SCANNER_ADDR + 0x1C)
+                    idr_a   = target.read32(SCANNER_ADDR + 0x20)
+                    idr_b   = target.read32(SCANNER_ADDR + 0x24)
+                    vdd_mv  = target.read32(SCANNER_ADDR + 0x28)
+                    raw_adc = target.read32(SCANNER_ADDR + 0x2C)
+                    hb      = target.read32(SCANNER_ADDR + 0x40)
+
+                    h_name = PIN_NAMES[h_idx] if h_idx < len(PIN_NAMES) else f"P{h_idx}"
+                    l_name = PIN_NAMES[l_idx] if l_idx < len(PIN_NAMES) else f"P{l_idx}"
+
+                    self.telemetry_updated.emit({
+                        'magic': magic,
+                        'mode': mode,
+                        'step': step,
+                        'total': total,
+                        'h_idx': h_idx,
+                        'l_idx': l_idx,
+                        'h_name': h_name,
+                        'l_name': l_name,
+                        'delay': delay,
+                        'paused': paused,
+                        'idr_a': idr_a,
+                        'idr_b': idr_b,
+                        'vdd_mv': vdd_mv,
+                        'raw_adc': raw_adc,
+                        'hb': hb
+                    })
+
+                self.msleep(60)
+
+            except Exception as e:
+                if connected:
+                    connected = False
+                    self.connection_changed.emit(False, f"Связь потеряна: {e}")
+                if session:
+                    try:
+                        session.close()
+                    except Exception:
+                        pass
+                    session = None
+                    target = None
+                self.msleep(1000)
+
+class DM02iStudio(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("DM02i Studio - Аппаратный картограф и диспетчер вейпа")
+        self.resize(1150, 780)
+        self.screen_map = {}
+        self.current_h_name = "PA0"
+        self.current_l_name = "PA1"
+        self.current_step = 0
+        self.load_screen_map()
+
+        self.init_ui()
+
+        # Start SWD Worker after UI is ready
+        self.worker = SwdWorker()
+        self.worker.connection_changed.connect(self.on_connection_changed)
+        self.worker.telemetry_updated.connect(self.on_telemetry_updated)
+        self.worker.start()
+
+    def closeEvent(self, event):
+        self.worker.stop()
+        super().closeEvent(event)
+
+    def load_screen_map(self):
+        if os.path.exists(MAP_FILE):
+            try:
+                with open(MAP_FILE, 'r', encoding='utf-8') as f:
+                    self.screen_map = json.load(f)
+            except Exception:
+                self.screen_map = {}
+
+    def save_screen_map(self):
+        try:
+            with open(MAP_FILE, 'w', encoding='utf-8') as f:
+                json.dump(self.screen_map, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print("Ошибка сохранения карты:", e)
+
+    def init_ui(self):
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #0b0f17;
+            }
+            QWidget {
+                color: #e2e8f0;
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }
+            QFrame.card {
+                background-color: #131b28;
+                border: 1px solid #233148;
+                border-radius: 12px;
+                padding: 14px;
+            }
+            QLabel.cardTitle {
+                font-size: 15px;
+                font-weight: bold;
+                color: #38bdf8;
+                border-bottom: 1px solid #1e293b;
+                padding-bottom: 6px;
+                margin-bottom: 8px;
+            }
+            QPushButton {
+                background-color: #1e293b;
+                border: 1px solid #334155;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: bold;
+                color: #f8fafc;
+            }
+            QPushButton:hover {
+                background-color: #2e3d54;
+                border-color: #38bdf8;
+            }
+            QPushButton:pressed {
+                background-color: #0284c7;
+            }
+            QPushButton.primary {
+                background-color: #0284c7;
+                border: 1px solid #38bdf8;
+            }
+            QPushButton.primary:hover {
+                background-color: #0369a1;
+            }
+            QPushButton.danger {
+                background-color: #be123c;
+                border: 1px solid #f43f5e;
+            }
+            QPushButton.danger:hover {
+                background-color: #9f1239;
+            }
+            QSlider::groove:horizontal {
+                height: 6px;
+                background: #1e293b;
+                border-radius: 3px;
+            }
+            QSlider::sub-page:horizontal {
+                background: #38bdf8;
+                border-radius: 3px;
+            }
+            QSlider::handle:horizontal {
+                background: #f8fafc;
+                width: 16px;
+                margin: -5px 0;
+                border-radius: 8px;
+            }
+            QTableWidget {
+                background-color: #0f172a;
+                border: 1px solid #233148;
+                border-radius: 8px;
+                gridline-color: #1e293b;
+            }
+            QHeaderView::section {
+                background-color: #1e293b;
+                color: #94a3b8;
+                padding: 4px;
+                border: 1px solid #0f172a;
+                font-weight: bold;
+            }
+        """)
+
+        central = QWidget()
+        self.setCentralWidget(central)
+        main_layout = QVBoxLayout(central)
+        main_layout.setContentsMargins(16, 16, 16, 16)
+        main_layout.setSpacing(12)
+
+        # 1. Top Status Header
+        header = QFrame()
+        header.setStyleSheet("background-color: #131b28; border: 1px solid #233148; border-radius: 8px; padding: 6px 12px;")
+        h_layout = QHBoxLayout(header)
+        h_layout.setContentsMargins(8, 4, 8, 4)
+
+        self.lbl_status = QLabel("● Поиск программатора...")
+        self.lbl_status.setStyleSheet("color: #f59e0b; font-weight: bold; font-size: 14px;")
+
+        self.lbl_vtarget = QLabel("АКБ / VDD: -- В")
+        self.lbl_vtarget.setStyleSheet("color: #38bdf8; font-weight: bold; font-size: 14px;")
+
+        self.lbl_switch = QLabel("ТУМБЛЕР BOOST: --")
+        self.lbl_switch.setStyleSheet("color: #a855f7; font-weight: bold; font-size: 14px;")
+
+        self.lbl_mic = QLabel("ДАТЧИК ЗАТЯЖКИ: ПОКОЙ")
+        self.lbl_mic.setStyleSheet("color: #10b981; font-weight: bold; font-size: 14px;")
+
+        h_layout.addWidget(self.lbl_status)
+        h_layout.addStretch()
+        h_layout.addWidget(self.lbl_vtarget)
+        h_layout.addSpacing(20)
+        h_layout.addWidget(self.lbl_switch)
+        h_layout.addSpacing(20)
+        h_layout.addWidget(self.lbl_mic)
+
+        main_layout.addWidget(header)
+
+        # 2. Main Content Split: Left (Display & Mapping) | Right (Controls & Logs)
+        content_layout = QHBoxLayout()
+        content_layout.setSpacing(14)
+
+        # === LEFT COLUMN: Virtual Display & Quick Segment Map ===
+        left_col = QVBoxLayout()
+
+        card_display = QFrame()
+        card_display.setProperty("class", "card")
+        d_layout = QVBoxLayout(card_display)
+
+        t_lbl = QLabel("📱 ВИРТУАЛЬНЫЙ ДИСПЛЕЙ DM02i (НАЖМИ НА ЭЛЕМЕНТ ДЛЯ ПРИВЯЗКИ)")
+        t_lbl.setProperty("class", "cardTitle")
+        d_layout.addWidget(t_lbl)
+
+        # Black bezel display container
+        disp_box = QFrame()
+        disp_box.setStyleSheet("""
+            background-color: #030712;
+            border: 3px solid #334155;
+            border-radius: 20px;
+            padding: 24px;
+        """)
+        disp_inner = QHBoxLayout(disp_box)
+        disp_inner.setSpacing(20)
+
+        # 1. Left: Liquid Oval with 3 bars + Drop
+        liquid_box = QFrame()
+        liquid_box.setStyleSheet("border: 2px solid #0284c7; border-radius: 28px; padding: 10px 8px; background: #082f49;")
+        l_layout = QVBoxLayout(liquid_box)
+        l_layout.setSpacing(6)
+
+        self.btn_bar3 = QPushButton("▬ 3")
+        self.btn_bar2 = QPushButton("▬ 2")
+        self.btn_bar1 = QPushButton("▬ 1")
+        self.btn_drop = QPushButton("💧")
+        for b in [self.btn_bar3, self.btn_bar2, self.btn_bar1, self.btn_drop]:
+            b.setStyleSheet("background: #0369a1; color: #38bdf8; font-size: 13px; font-weight: bold; min-height: 28px; border-radius: 6px;")
+            b.clicked.connect(lambda ch, btn=b: self.map_element(btn.text()))
+            l_layout.addWidget(b)
+
+        disp_inner.addWidget(liquid_box)
+
+        # 2. Middle: Lightning + % + Digits (88)
+        mid_box = QVBoxLayout()
+        mid_top = QHBoxLayout()
+
+        self.btn_lightning = QPushButton("⚡ МОЛНИЯ")
+        self.btn_lightning.setStyleSheet("background: #ca8a04; color: #fef08a; font-weight: bold; font-size: 13px; border-radius: 6px; padding: 6px 12px;")
+        self.btn_lightning.clicked.connect(lambda: self.map_element("⚡ Молния"))
+
+        self.btn_percent = QPushButton("% ПРОЦЕНТ")
+        self.btn_percent.setStyleSheet("background: #15803d; color: #86efac; font-weight: bold; font-size: 13px; border-radius: 6px; padding: 6px 12px;")
+        self.btn_percent.clicked.connect(lambda: self.map_element("% Процент"))
+
+        mid_top.addWidget(self.btn_lightning)
+        mid_top.addWidget(self.btn_percent)
+        mid_box.addLayout(mid_top)
+
+        # Two 7-segment digit representations
+        digits_row = QHBoxLayout()
+        self.digit_btns = {}
+        for d in [1, 2]:
+            d_frame = QFrame()
+            d_frame.setStyleSheet("background: #111827; border: 1px solid #374151; border-radius: 8px; padding: 6px;")
+            d_grid = QGridLayout(d_frame)
+            d_grid.setSpacing(3)
+
+            seg_names = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
+            # Standard 7-seg layout
+            positions = {
+                'A': (0, 1),
+                'B': (1, 2),
+                'C': (3, 2),
+                'D': (4, 1),
+                'E': (3, 0),
+                'F': (1, 0),
+                'G': (2, 1)
+            }
+            for s in seg_names:
+                r, c = positions[s]
+                b = QPushButton(s)
+                b.setFixedSize(28, 22)
+                b.setStyleSheet("background: #1f2937; color: #eab308; font-weight: bold; font-size: 11px; padding: 0;")
+                name = f"Цифра {d} Сегм {s}"
+                b.clicked.connect(lambda ch, n=name: self.map_element(n))
+                d_grid.addWidget(b, r, c)
+                self.digit_btns[name] = b
+
+            lbl_d = QLabel(f"Цифра {d}")
+            lbl_d.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl_d.setStyleSheet("color: #9ca3af; font-size: 11px;")
+            d_grid.addWidget(lbl_d, 5, 0, 1, 3)
+
+            digits_row.addWidget(d_frame)
+
+        mid_box.addLayout(digits_row)
+        disp_inner.addLayout(mid_box)
+
+        # 3. Right: Oval with BOOST badge
+        self.btn_boost = QPushButton("BOOST")
+        self.btn_boost.setStyleSheet("""
+            background-color: #581c87;
+            color: #f3e8ff;
+            font-size: 18px;
+            font-weight: bold;
+            border: 2px solid #a855f7;
+            border-radius: 36px;
+            min-width: 90px;
+            min-height: 120px;
+        """)
+        self.btn_boost.clicked.connect(lambda: self.map_element("Надпись BOOST"))
+        disp_inner.addWidget(self.btn_boost)
+
+        d_layout.addWidget(disp_box)
+
+        # Current pair indicator badge
+        self.pair_card = QFrame()
+        self.pair_card.setStyleSheet("background: #0f172a; border: 2px solid #0284c7; border-radius: 8px; padding: 10px;")
+        p_lay = QVBoxLayout(self.pair_card)
+        self.lbl_pair_title = QLabel("АКТИВНЫЙ ШАГ СКАНИРОВАНИЯ:")
+        self.lbl_pair_title.setStyleSheet("color: #94a3b8; font-size: 12px; font-weight: bold;")
+        self.lbl_pair_value = QLabel("HIGH: PA0 (+3.3V) ➔ LOW: PA1 (GND)")
+        self.lbl_pair_value.setStyleSheet("color: #38bdf8; font-size: 20px; font-weight: bold;")
+        p_lay.addWidget(self.lbl_pair_title)
+        p_lay.addWidget(self.lbl_pair_value)
+        d_layout.addWidget(self.pair_card)
+
+        left_col.addWidget(card_display)
+        content_layout.addLayout(left_col, 5)
+
+        # === RIGHT COLUMN: Controls & Found Mapping Table ===
+        right_col = QVBoxLayout()
+
+        # Card: Scan Controls
+        card_ctrl = QFrame()
+        card_ctrl.setProperty("class", "card")
+        c_layout = QVBoxLayout(card_ctrl)
+
+        ctrl_title = QLabel("⚙ УПРАВЛЕНИЕ СКАНИРОВАНИЕМ")
+        ctrl_title.setProperty("class", "cardTitle")
+        c_layout.addWidget(ctrl_title)
+
+        # Buttons row: Play/Pause, Next, Prev
+        btn_row = QHBoxLayout()
+        self.btn_pause = QPushButton("⏸ ПАУЗА")
+        self.btn_pause.setProperty("class", "primary")
+        self.btn_pause.clicked.connect(self.toggle_pause)
+
+        self.btn_prev = QPushButton("◀ Назад")
+        self.btn_prev.clicked.connect(lambda: self.worker.send_cmd('PREV', 1))
+
+        self.btn_next = QPushButton("Вперёд ▶")
+        self.btn_next.clicked.connect(lambda: self.worker.send_cmd('NEXT', 1))
+
+        btn_row.addWidget(self.btn_prev)
+        btn_row.addWidget(self.btn_pause)
+        btn_row.addWidget(self.btn_next)
+        c_layout.addLayout(btn_row)
+
+        # Speed slider
+        speed_row = QHBoxLayout()
+        speed_row.addWidget(QLabel("Скорость:"))
+        self.slider_speed = QSlider(Qt.Orientation.Horizontal)
+        self.slider_speed.setRange(200, 3000)
+        self.slider_speed.setValue(1000)
+        self.slider_speed.valueChanged.connect(self.on_speed_changed)
+        self.lbl_speed_val = QLabel("1000 мс")
+        speed_row.addWidget(self.slider_speed)
+        speed_row.addWidget(self.lbl_speed_val)
+        c_layout.addLayout(speed_row)
+
+        # Mode selection
+        mode_row = QHBoxLayout()
+        self.radio_charlie = QRadioButton("Charlieplexing")
+        self.radio_single  = QRadioButton("Single Pin High")
+        self.radio_off     = QRadioButton("Все Выкл")
+        self.radio_charlie.setChecked(True)
+
+        self.radio_charlie.toggled.connect(lambda: self.worker.send_cmd('MODE', 0) if self.radio_charlie.isChecked() else None)
+        self.radio_single.toggled.connect(lambda: self.worker.send_cmd('MODE', 2) if self.radio_single.isChecked() else None)
+        self.radio_off.toggled.connect(lambda: self.worker.send_cmd('MODE', 3) if self.radio_off.isChecked() else None)
+
+        mode_row.addWidget(self.radio_charlie)
+        mode_row.addWidget(self.radio_single)
+        mode_row.addWidget(self.radio_off)
+        c_layout.addLayout(mode_row)
+
+        # Manual Pin Selectors
+        man_row = QHBoxLayout()
+        man_row.addWidget(QLabel("HIGH (+):"))
+        self.combo_high = QComboBox()
+        self.combo_high.addItems(PIN_NAMES)
+        self.combo_high.currentIndexChanged.connect(self.on_manual_pins_changed)
+
+        man_row.addWidget(self.combo_high)
+        man_row.addWidget(QLabel("LOW (-):"))
+        self.combo_low = QComboBox()
+        self.combo_low.addItems(PIN_NAMES)
+        self.combo_low.setCurrentIndex(1)
+        self.combo_low.currentIndexChanged.connect(self.on_manual_pins_changed)
+        man_row.addWidget(self.combo_low)
+
+        self.btn_hold_pair = QPushButton("Зафиксировать пару")
+        self.btn_hold_pair.clicked.connect(self.hold_manual_pair)
+        man_row.addWidget(self.btn_hold_pair)
+        c_layout.addLayout(man_row)
+
+        right_col.addWidget(card_ctrl)
+
+        # Card: Mapped Elements Table
+        card_table = QFrame()
+        card_table.setProperty("class", "card")
+        t_layout = QVBoxLayout(card_table)
+
+        tbl_title = QLabel("📋 КАРТА НАЙДЕННЫХ СЕГМЕНТОВ (СОХРАНЯЕТСЯ В JSON)")
+        tbl_title.setProperty("class", "cardTitle")
+        t_layout.addWidget(tbl_title)
+
+        self.table = QTableWidget()
+        self.table.setColumnCount(4)
+        self.table.setHorizontalHeaderLabels(["Элемент", "HIGH (+)", "LOW (-)", "Действие"])
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        t_layout.addWidget(self.table)
+
+        # Action buttons: Export / Clear
+        act_row = QHBoxLayout()
+        btn_save = QPushButton("💾 Сохранить карту в C-драйвер")
+        btn_save.clicked.connect(self.export_c_driver)
+
+        btn_clear = QPushButton("🗑 Очистить карту")
+        btn_clear.setProperty("class", "danger")
+        btn_clear.clicked.connect(self.clear_map)
+
+        act_row.addWidget(btn_save)
+        act_row.addWidget(btn_clear)
+        t_layout.addLayout(act_row)
+
+        right_col.addWidget(card_table)
+        content_layout.addLayout(right_col, 6)
+
+        main_layout.addLayout(content_layout)
+
+        self.refresh_table()
+
+    def toggle_pause(self):
+        cur_text = self.btn_pause.text()
+        if "ПАУЗА" in cur_text:
+            self.worker.send_cmd('PAUSE', 1)
+            self.btn_pause.setText("▶ СТАРТ")
+            self.btn_pause.setStyleSheet("background-color: #16a34a;")
+        else:
+            self.worker.send_cmd('PAUSE', 0)
+            self.btn_pause.setText("⏸ ПАУЗА")
+            self.btn_pause.setStyleSheet("background-color: #0284c7;")
+
+    def on_speed_changed(self, val):
+        self.lbl_speed_val.setText(f"{val} мс")
+        self.worker.send_cmd('DELAY', val)
+
+    def on_manual_pins_changed(self):
+        pass
+
+    def hold_manual_pair(self):
+        h = self.combo_high.currentIndex()
+        l = self.combo_low.currentIndex()
+        self.worker.send_cmd('MODE', 1) # Mode 1: Manual Pair
+        self.worker.send_cmd('SET_HIGH', h)
+        self.worker.send_cmd('SET_LOW', l)
+        self.btn_pause.setText("▶ ВОЗОБНОВИТЬ АВТО")
+
+    def map_element(self, element_name):
+        # Bind current active pair to element
+        pair_key = f"{self.current_h_name}->{self.current_l_name}"
+        self.screen_map[element_name] = {
+            'high': self.current_h_name,
+            'low': self.current_l_name,
+            'step': self.current_step
+        }
+        self.save_screen_map()
+        self.refresh_table()
+
+    def delete_mapped_element(self, element_name):
+        if element_name in self.screen_map:
+            del self.screen_map[element_name]
+            self.save_screen_map()
+            self.refresh_table()
+
+    def clear_map(self):
+        self.screen_map.clear()
+        self.save_screen_map()
+        self.refresh_table()
+
+    def refresh_table(self):
+        self.table.setRowCount(len(self.screen_map))
+        row = 0
+        for name, data in self.screen_map.items():
+            self.table.setItem(row, 0, QTableWidgetItem(name))
+            self.table.setItem(row, 1, QTableWidgetItem(data['high']))
+            self.table.setItem(row, 2, QTableWidgetItem(data['low']))
+            
+            btn_del = QPushButton("✕")
+            btn_del.setFixedSize(28, 24)
+            btn_del.setStyleSheet("background: #be123c; color: white; padding: 0; font-weight: bold;")
+            btn_del.clicked.connect(lambda ch, n=name: self.delete_mapped_element(n))
+            self.table.setCellWidget(row, 3, btn_del)
+            row += 1
+
+    def export_c_driver(self):
+        out_c = os.path.join(os.path.dirname(os.path.abspath(__file__)), "custom_firmware", "dm02i_display_map.h")
+        try:
+            with open(out_c, "w", encoding="utf-8") as f:
+                f.write("// Автоматически сгенерированная карта сегментов DM02i V03\n")
+                f.write("#ifndef DM02I_DISPLAY_MAP_H\n#define DM02I_DISPLAY_MAP_H\n\n")
+                f.write("typedef struct {\n    const char *name;\n    uint8_t high_pin;\n    uint8_t low_pin;\n} SegmentMap_t;\n\n")
+                f.write("static const SegmentMap_t DM02I_SEGMENTS[] = {\n")
+                for name, d in self.screen_map.items():
+                    f.write(f'    {{"{name}", {d["high"]}_IDX, {d["low"]}_IDX}},\n')
+                f.write("};\n\n#endif\n")
+            print(f"Экспорт завершен: {out_c}")
+        except Exception as e:
+            print("Ошибка экспорта:", e)
+
+    def on_connection_changed(self, connected, text):
+        if connected:
+            self.lbl_status.setText(f"● {text}")
+            self.lbl_status.setStyleSheet("color: #10b981; font-weight: bold; font-size: 14px;")
+        else:
+            self.lbl_status.setText(f"● {text}")
+            self.lbl_status.setStyleSheet("color: #ef4444; font-weight: bold; font-size: 14px;")
+
+    def on_telemetry_updated(self, d):
+        self.current_step = d['step']
+        self.current_h_name = d['h_name']
+        self.current_l_name = d['l_name']
+
+        # Update Voltage
+        vdd = d['vdd_mv'] / 1000.0
+        self.lbl_vtarget.setText(f"АКБ / VDD: {vdd:.2f} В ({d['vdd_mv']} мВ)")
+
+        # Update Switch / Inputs from IDR
+        idr_a = d['idr_a']
+        idr_b = d['idr_b']
+
+        # Display pair banner
+        self.lbl_pair_title.setText(f"АКТИВНЫЙ ШАГ #{d['step']}/{d['total']}:")
+        self.lbl_pair_value.setText(f"HIGH: {d['h_name']} (+3.3V)  ➔  LOW: {d['l_name']} (GND)")
+
+        # Sync button text if paused externally
+        if d['paused']:
+            self.btn_pause.setText("▶ СТАРТ")
+            self.btn_pause.setStyleSheet("background-color: #16a34a;")
+        else:
+            self.btn_pause.setText("⏸ ПАУЗА")
+            self.btn_pause.setStyleSheet("background-color: #0284c7;")
+
+def main():
+    app = QApplication(sys.argv)
+    window = DM02iStudio()
+    window.show()
+    sys.exit(app.exec())
+
+if __name__ == '__main__':
+    main()
