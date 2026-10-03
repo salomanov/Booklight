@@ -45,7 +45,7 @@ SCANNER_ADDR = 0x20000004
 TARGET = 'py32f002bx5'
 
 PIN_NAMES = [
-    "PA0", "PA1", "PA3", "PA4", "PB0", "PB1", "PB2", "PB3", "PB4", "PB5"
+    "PA0", "PA1", "PB0", "PB1", "PB2", "PB3"
 ]
 
 MAP_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dm02i_screen_map.json")
@@ -393,19 +393,35 @@ class DM02iStudio(QMainWindow):
         digits_row = QHBoxLayout()
         self.digit_btns = {}
 
-        # Hundreds '1' digit (for 100%)
+        # Hundreds '1' digit (TWO SEGMENTS: Top and Bottom)
         hundreds_frame = QFrame()
-        hundreds_frame.setStyleSheet("background: #111827; border: 1px solid #374151; border-radius: 8px; padding: 6px;")
+        hundreds_frame.setStyleSheet("background: #111827; border: 1px solid #374151; border-radius: 8px; padding: 4px;")
         h_layout = QVBoxLayout(hundreds_frame)
         h_layout.setSpacing(3)
-        self.btn_hundreds = QPushButton("1")
-        self.btn_hundreds.setFixedSize(30, 116)
-        self.btn_hundreds.setStyleSheet("background: #1f2937; color: #eab308; font-weight: bold; font-size: 22px; padding: 0; border-radius: 4px;")
-        self.btn_hundreds.clicked.connect(lambda: self.map_element("Символ 1 (сотни)"))
-        h_layout.addWidget(self.btn_hundreds)
-        lbl_h = QLabel("Сотня '1'")
+
+        self.btn_hundreds_top = QPushButton("1▲")
+        self.btn_hundreds_top.setFixedSize(30, 44)
+        self.btn_hundreds_top.setStyleSheet("background: #1f2937; color: #eab308; font-weight: bold; font-size: 13px; padding: 0; border-radius: 4px;")
+        self.btn_hundreds_top.setToolTip("Верхний сегмент единицы сотен")
+        self.btn_hundreds_top.clicked.connect(lambda: self.map_element("Сотня 1 (Верх)"))
+        h_layout.addWidget(self.btn_hundreds_top)
+
+        self.btn_hundreds_bot = QPushButton("1▼")
+        self.btn_hundreds_bot.setFixedSize(30, 44)
+        self.btn_hundreds_bot.setStyleSheet("background: #1f2937; color: #eab308; font-weight: bold; font-size: 13px; padding: 0; border-radius: 4px;")
+        self.btn_hundreds_bot.setToolTip("Нижний сегмент единицы сотен")
+        self.btn_hundreds_bot.clicked.connect(lambda: self.map_element("Сотня 1 (Низ)"))
+        h_layout.addWidget(self.btn_hundreds_bot)
+
+        self.btn_hundreds_all = QPushButton("1 Вся")
+        self.btn_hundreds_all.setFixedSize(30, 24)
+        self.btn_hundreds_all.setStyleSheet("background: #374151; color: #facc15; font-size: 9px; padding: 0; border-radius: 3px;")
+        self.btn_hundreds_all.clicked.connect(lambda: self.map_element("Сотня 1 (Вся)"))
+        h_layout.addWidget(self.btn_hundreds_all)
+
+        lbl_h = QLabel("Сотня")
         lbl_h.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl_h.setStyleSheet("color: #9ca3af; font-size: 10px;")
+        lbl_h.setStyleSheet("color: #9ca3af; font-size: 9px;")
         h_layout.addWidget(lbl_h)
         digits_row.addWidget(hundreds_frame)
 
@@ -447,38 +463,50 @@ class DM02iStudio(QMainWindow):
         mid_box.addLayout(digits_row)
         disp_inner.addLayout(mid_box)
 
-        # 3. Right: Oval with BOOST badge
+        # 3. Right: BOOST panel (Multiple diodes & letters & frame)
         boost_frame = QFrame()
-        boost_frame.setStyleSheet("background: #3b0764; border: 2px solid #a855f7; border-radius: 36px; padding: 8px;")
+        boost_frame.setStyleSheet("background: #2e1065; border: 2px solid #a855f7; border-radius: 16px; padding: 6px;")
         boost_lay = QVBoxLayout(boost_frame)
-        boost_lay.setSpacing(6)
+        boost_lay.setSpacing(4)
 
-        self.btn_boost = QPushButton("BOOST")
-        self.btn_boost.setStyleSheet("""
-            background-color: #581c87;
-            color: #f3e8ff;
-            font-size: 16px;
-            font-weight: bold;
-            border: 1px solid #c084fc;
-            border-radius: 18px;
-            min-width: 80px;
-            min-height: 60px;
-        """)
-        self.btn_boost.clicked.connect(lambda: self.map_element("Надпись BOOST"))
-        boost_lay.addWidget(self.btn_boost)
+        b_title = QLabel("ПЛАШКА BOOST")
+        b_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        b_title.setStyleSheet("color: #f3e8ff; font-weight: bold; font-size: 11px;")
+        boost_lay.addWidget(b_title)
 
-        self.btn_boost_oval = QPushButton("ОБОДОК")
-        self.btn_boost_oval.setStyleSheet("""
-            background-color: #4c1d95;
-            color: #d8b4fe;
-            font-size: 11px;
-            font-weight: bold;
-            border: 1px solid #a855f7;
-            border-radius: 12px;
-            min-height: 24px;
-        """)
+        # Letters row: B, O, O, S, T
+        b_letters_row = QHBoxLayout()
+        b_letters_row.setSpacing(2)
+        for letter in ["B", "O₁", "O₂", "S", "T"]:
+            b_btn = QPushButton(letter)
+            b_btn.setFixedSize(24, 28)
+            b_btn.setStyleSheet("background: #581c87; color: #f3e8ff; font-weight: bold; font-size: 11px; padding: 0; border-radius: 3px;")
+            b_name = f"BOOST Буква {letter}"
+            b_btn.clicked.connect(lambda ch, n=b_name: self.map_element(n))
+            b_letters_row.addWidget(b_btn)
+        boost_lay.addLayout(b_letters_row)
+
+        # Diodes row: Д1, Д2, Д3, Д4
+        diodes_row = QHBoxLayout()
+        diodes_row.setSpacing(2)
+        for d_num in [1, 2, 3, 4]:
+            d_btn = QPushButton(f"Д{d_num}")
+            d_btn.setFixedSize(30, 24)
+            d_btn.setStyleSheet("background: #6b21a8; color: #e9d5ff; font-size: 11px; padding: 0; border-radius: 3px;")
+            d_name = f"BOOST Диод {d_num}"
+            d_btn.clicked.connect(lambda ch, n=d_name: self.map_element(n))
+            diodes_row.addWidget(d_btn)
+        boost_lay.addLayout(diodes_row)
+
+        self.btn_boost_oval = QPushButton("ОБОДОК BOOST")
+        self.btn_boost_oval.setStyleSheet("background-color: #4c1d95; color: #d8b4fe; font-size: 11px; font-weight: bold; border: 1px solid #a855f7; border-radius: 4px; min-height: 22px;")
         self.btn_boost_oval.clicked.connect(lambda: self.map_element("Ободок BOOST"))
         boost_lay.addWidget(self.btn_boost_oval)
+
+        self.btn_boost_all = QPushButton("ВЕСЬ BOOST")
+        self.btn_boost_all.setStyleSheet("background-color: #7e22ce; color: #ffffff; font-size: 11px; font-weight: bold; border: 1px solid #c084fc; border-radius: 4px; min-height: 24px;")
+        self.btn_boost_all.clicked.connect(lambda: self.map_element("Надпись BOOST"))
+        boost_lay.addWidget(self.btn_boost_all)
 
         disp_inner.addWidget(boost_frame)
 

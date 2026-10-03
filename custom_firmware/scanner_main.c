@@ -46,7 +46,7 @@ volatile ScannerShared_t g_scanner = {
     .magic       = SCANNER_MAGIC,
     .mode        = 0,
     .step_idx    = 0,
-    .total_steps = 90,
+    .total_steps = 30,
     .high_pin_idx= 0,
     .low_pin_idx = 1,
     .delay_ms    = 1000,
@@ -67,21 +67,17 @@ typedef struct {
     uint16_t pin;
 } PinDef_t;
 
-/* Candidate display GPIOs on DM02i V03 (Excludes SWD PA2/PB6 and Coil FETs PA5..PA7, PB7) */
-static const PinDef_t PINS[10] = {
-    {GPIOA, GPIO_PIN_0}, // 0: PA0
-    {GPIOA, GPIO_PIN_1}, // 1: PA1
-    {GPIOA, GPIO_PIN_3}, // 2: PA3
-    {GPIOA, GPIO_PIN_4}, // 3: PA4
-    {GPIOB, GPIO_PIN_0}, // 4: PB0
-    {GPIOB, GPIO_PIN_1}, // 5: PB1
-    {GPIOB, GPIO_PIN_2}, // 6: PB2
-    {GPIOB, GPIO_PIN_3}, // 7: PB3
-    {GPIOB, GPIO_PIN_4}, // 8: PB4
-    {GPIOB, GPIO_PIN_5}, // 9: PB5
+/* Exactly the 6 GPIOs routed to the 6-pin display connector on DM02i V03 (pins 9..14 on QFN-20) */
+static const PinDef_t PINS[6] = {
+    {GPIOA, GPIO_PIN_0}, // 0: PA0 (Pin 13)
+    {GPIOA, GPIO_PIN_1}, // 1: PA1 (Pin 14)
+    {GPIOB, GPIO_PIN_0}, // 2: PB0 (Pin 12)
+    {GPIOB, GPIO_PIN_1}, // 3: PB1 (Pin 11)
+    {GPIOB, GPIO_PIN_2}, // 4: PB2 (Pin 10)
+    {GPIOB, GPIO_PIN_3}, // 5: PB3 (Pin 9)
 };
 
-#define NUM_PINS 10
+#define NUM_PINS 6
 
 static volatile uint32_t s_millis = 0;
 
@@ -243,21 +239,21 @@ int main(void) {
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOB_CLK_ENABLE();
 
-    /* Safeguard: keep all FET coil lines (PA5, PA6, PA7, PB7) as High-Z inputs with NO PULL.
+    /* Safeguard: keep all FET coil lines (PA7) and unused lines (PA3..PA6, PB4, PB5, PB7) as High-Z inputs with NO PULL.
      * Their external pull-up resistors will hold their gates at VDD, ensuring the heater coil stays 100% OFF. */
-    GPIO_InitTypeDef fet_init = {0};
-    fet_init.Mode = GPIO_MODE_INPUT;
-    fet_init.Pull = GPIO_NOPULL;
-    fet_init.Pin  = GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7;
-    HAL_GPIO_Init(GPIOA, &fet_init);
+    GPIO_InitTypeDef safe_init = {0};
+    safe_init.Mode = GPIO_MODE_INPUT;
+    safe_init.Pull = GPIO_NOPULL;
+    safe_init.Pin  = GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7;
+    HAL_GPIO_Init(GPIOA, &safe_init);
 
-    fet_init.Pin  = GPIO_PIN_7;
-    HAL_GPIO_Init(GPIOB, &fet_init);
+    safe_init.Pin  = GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_7;
+    HAL_GPIO_Init(GPIOB, &safe_init);
 
     all_pins_high_z();
     adc_init();
 
-    g_scanner.total_steps = NUM_PINS * (NUM_PINS - 1); // 90 steps
+    g_scanner.total_steps = NUM_PINS * (NUM_PINS - 1); // 30 steps
     int init_h = 0, init_l = 1;
     get_pair_for_step(0, &init_h, &init_l);
     g_scanner.high_pin_idx = init_h;
