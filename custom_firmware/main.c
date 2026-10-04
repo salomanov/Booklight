@@ -298,6 +298,7 @@ int main(void)
 
     int8_t dim_direction = -1;             // -1 = dimming down first, +1 = brightening up
     uint32_t show_bat_until_ms = 0;        // Battery preview duration on 1-click (5 seconds)
+    uint32_t show_bright_until_ms = 0;     // Brightness adjustment preview (1.5 seconds)
     uint32_t last_swd_fil_target = 0;
     uint32_t last_swd_led_target = 0;
     uint32_t last_disp_ms = 0;
@@ -351,6 +352,7 @@ int main(void)
                     last_swd_fil_target = 0;
                     gled_fade(&fil_led, 0, g_lamp.fade_time_ms);
                     show_bat_until_ms = 0;
+                    show_bright_until_ms = 0;
                 }
                 else
                 {
@@ -362,6 +364,7 @@ int main(void)
                     gled_fade(&fil_led, byte_val, g_lamp.fade_time_ms);
                     dim_direction = -1; /* Always dim DOWN first on subsequent hold */
                     show_bat_until_ms = 0;
+                    show_bright_until_ms = 0; /* Keep screen OFF when turning ON */
                 }
             }
 
@@ -370,7 +373,8 @@ int main(void)
             {
                 if (g_lamp.fil_state)
                 {
-                    show_bat_until_ms = 0; /* Switch display back to brightness % */
+                    show_bat_until_ms = 0;
+                    show_bright_until_ms = now + 1500; /* Show brightness while adjusting + 1.5s after */
 
                     int32_t new_pct = (int32_t)g_lamp.fil_saved_pct + (dim_direction * 1);
                     if (new_pct > 100) { new_pct = 100; }
@@ -493,9 +497,9 @@ int main(void)
 
                     fh8016_set_state(&disp, b_pct, bars, 0, color, color);
                 }
-                else if (g_lamp.fil_state || g_lamp.fil_current_pct > 0)
+                else if (now < show_bright_until_ms)
                 {
-                    /* LAMP IS ACTIVE: Display shows filament brightness percentage */
+                    /* BRIGHTNESS ADJUSTMENT PREVIEW: shows for 1.5s while/after dimming */
                     uint8_t cur = (uint8_t)g_lamp.fil_current_pct;
                     uint8_t bars = (cur >= 80) ? 4 : (cur >= 60) ? 3 : (cur >= 40) ? 2 : (cur >= 20) ? 1 : 0;
                     fh8016_color_t color = (g_lamp.bat_percent >= 60) ? FH8016_COLOR_GREEN : 
@@ -512,7 +516,7 @@ int main(void)
                 }
                 else
                 {
-                    /* Lamp is OFF and not charging -> display sleep */
+                    /* Display sleep: screen is OFF when reading (backlight active) or idle */
                     g_lamp.disp_power = 0;
                     fh8016_set_raw(&disp, 0);
                 }
