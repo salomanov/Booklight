@@ -19,6 +19,10 @@ except Exception:
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 BIN_PATH = os.path.join(ROOT_DIR, "custom_firmware", "build", "scanner.bin")
+for arg in sys.argv[1:]:
+    if arg.endswith(".bin") and os.path.exists(arg):
+        BIN_PATH = os.path.abspath(arg)
+        break
 
 def main():
     print("=" * 65)
