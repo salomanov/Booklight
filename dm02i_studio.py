@@ -732,7 +732,7 @@ class DM02iStudio(QMainWindow):
         self.worker.send_cmd('DELAY', val)
 
     def on_manual_pins_changed(self):
-        pass
+        self.hold_manual_pair()
 
     def hold_manual_pair(self):
         h = self.combo_high.currentIndex()
