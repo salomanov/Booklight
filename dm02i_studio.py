@@ -44,7 +44,8 @@ import pylink
 SCANNER_ADDR = 0x20000004
 
 PIN_NAMES = [
-    "PA0", "PA1", "PA3", "PB0", "PB1", "PB2", "PB3", "PB4", "PB5"
+    "PA0", "PA1", "PA3", "PA4", "PA5", "PA6", "PA7",
+    "PB0", "PB1", "PB2", "PB3", "PB4", "PB5"
 ]
 
 MAP_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dm02i_screen_map.json")
@@ -134,6 +135,17 @@ class SwdWorker(QThread):
                             j.coresight_write(3, int(val), ap=True)
                             j.coresight_write(1, base + 0x30, ap=True)
                             j.coresight_write(3, 1, ap=True)
+                        elif cmd == 'SET_MUX':
+                            pairs = val[:32]
+                            j.coresight_write(1, base + 0x44, ap=True)
+                            j.coresight_write(3, len(pairs), ap=True)
+                            for idx, (h, l) in enumerate(pairs):
+                                packed = ((h & 0xFF) << 8) | (l & 0xFF)
+                                j.coresight_write(1, base + 0x48 + idx * 4, ap=True)
+                                j.coresight_write(3, packed, ap=True)
+                            # switch to Mode 4 (Multiplex)
+                            j.coresight_write(1, base + 0x04, ap=True)
+                            j.coresight_write(3, 4, ap=True)
                     except Exception as cmd_err:
                         print(f"[SWD Command Warning] {cmd}: {cmd_err}")
 
@@ -638,6 +650,12 @@ class DM02iStudio(QMainWindow):
         mode_row.addWidget(self.radio_off)
         c_layout.addLayout(mode_row)
 
+        # Simultaneous Multiplexing Button
+        self.btn_mux = QPushButton("⚡ ОДНОВРЕМЕННО ЗАЖЕЧЬ ВСЕ НАЙДЕННЫЕ ЗНАКИ (МУЛЬТИПЛЕКС)")
+        self.btn_mux.setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #059669, stop:1 #10b981); color: white; font-weight: bold; font-size: 12px; padding: 8px; border-radius: 6px; margin: 4px 0;")
+        self.btn_mux.clicked.connect(self.trigger_multiplex)
+        c_layout.addWidget(self.btn_mux)
+
         # Manual Pin Selectors
         man_row = QHBoxLayout()
         man_row.addWidget(QLabel("HIGH (+):"))
@@ -723,6 +741,27 @@ class DM02iStudio(QMainWindow):
         self.worker.send_cmd('SET_HIGH', h)
         self.worker.send_cmd('SET_LOW', l)
         self.btn_pause.setText("[>] ВОЗОБНОВИТЬ АВТО")
+
+    def trigger_multiplex(self):
+        pairs = []
+        for name, item in self.screen_map.items():
+            h_name = item.get('high')
+            l_name = item.get('low')
+            if h_name in PIN_NAMES and l_name in PIN_NAMES:
+                h_idx = PIN_NAMES.index(h_name)
+                l_idx = PIN_NAMES.index(l_name)
+                if (h_idx, l_idx) not in pairs:
+                    pairs.append((h_idx, l_idx))
+        if pairs:
+            self.radio_charlie.setChecked(False)
+            self.radio_single.setChecked(False)
+            self.radio_off.setChecked(False)
+            self.btn_pause.setText("[>] ВОЗОБНОВИТЬ АВТО")
+            self.worker.send_cmd('SET_MUX', pairs)
+            self.lbl_status.setText(f"[⚡] Мультиплекс: одновременно горят {len(pairs)} сегментов!")
+            self.lbl_status.setStyleSheet("color: #10b981; font-weight: bold; font-size: 14px;")
+        else:
+            self.lbl_status.setText("[!] Нет привязанных сегментов для мультиплекса")
 
     def map_element(self, element_name):
         # Bind current active pair to element

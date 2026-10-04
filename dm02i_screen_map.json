@@ -1,1 +1,97 @@
-{}
+{
+  "Цифра 1 Сегм D": {
+    "high": "PB5",
+    "low": "PB0",
+    "step": 68
+  },
+  "Цифра 2 Сегм G": {
+    "high": "PB5",
+    "low": "PB2",
+    "step": 69
+  },
+  "BOOST Диод 4": {
+    "high": "PB5",
+    "low": "PB3",
+    "step": 70
+  },
+  "Цифра 1 Сегм F": {
+    "high": "PB0",
+    "low": "PB1",
+    "step": 27
+  },
+  "Цифра 2 Сегм D": {
+    "high": "PB0",
+    "low": "PB2",
+    "step": 28
+  },
+  "BOOST Буква B": {
+    "high": "PB0",
+    "low": "PB3",
+    "step": 29
+  },
+  "Сотня 1 (Низ)": {
+    "high": "PB0",
+    "low": "PB5",
+    "step": 31
+  },
+  "Цифра 1 Сегм A": {
+    "high": "PB1",
+    "low": "PB0",
+    "step": 35
+  },
+  "Цифра 2 Сегм E": {
+    "high": "PB1",
+    "low": "PB2",
+    "step": 36
+  },
+  "BOOST Буква T": {
+    "high": "PB1",
+    "low": "PB3",
+    "step": 37
+  },
+  "Молния": {
+    "high": "PB1",
+    "low": "PB5",
+    "step": 39
+  },
+  "Цифра 1 Сегм B": {
+    "high": "PB2",
+    "low": "PB0",
+    "step": 43
+  },
+  "Цифра 1 Сегм G": {
+    "high": "PB2",
+    "low": "PB1",
+    "step": 44
+  },
+  "BOOST Диод 2": {
+    "high": "PB2",
+    "low": "PB3",
+    "step": 45
+  },
+  "- 3": {
+    "high": "PB2",
+    "low": "PB5",
+    "step": 47
+  },
+  "Цифра 1 Сегм C": {
+    "high": "PB3",
+    "low": "PB0",
+    "step": 51
+  },
+  "Цифра 2 Сегм A": {
+    "high": "PB3",
+    "low": "PB1",
+    "step": 52
+  },
+  "Цифра 2 Сегм F": {
+    "high": "PB3",
+    "low": "PB2",
+    "step": 53
+  },
+  "- 2": {
+    "high": "PB3",
+    "low": "PB5",
+    "step": 55
+  }
+}

@@ -38,7 +38,15 @@ typedef struct {
     uint32_t cmd_set_high;   // +0x38: Target high pin
     uint32_t cmd_set_low;    // +0x3C: Target low pin
     uint32_t heartbeat;      // +0x40: Increments every 10ms
+
+    /* Multiplex support: simultaneous display of up to 32 pairs */
+    uint32_t mux_count;      // +0x44: Number of active pairs (0..32)
+    uint32_t mux_pairs[32];  // +0x48 .. +0xC4: packed (high << 8) | low
 } __attribute__((aligned(4))) ScannerShared_t;
+
+#define NUM_PINS 13
+#define PAIR_STEPS (NUM_PINS * (NUM_PINS - 1)) // 156
+#define TOTAL_STEPS (PAIR_STEPS + NUM_PINS + NUM_PINS) // 182
 
 /* Pinned strictly to start of SRAM 0x20000000 */
 __attribute__((section(".shared_data")))
@@ -46,7 +54,7 @@ volatile ScannerShared_t g_scanner = {
     .magic       = SCANNER_MAGIC,
     .mode        = 0,
     .step_idx    = 0,
-    .total_steps = 72,
+    .total_steps = TOTAL_STEPS,
     .high_pin_idx= 0,
     .low_pin_idx = 1,
     .delay_ms    = 1000,
@@ -59,7 +67,9 @@ volatile ScannerShared_t g_scanner = {
     .cmd_prev    = 0,
     .cmd_set_high= 0,
     .cmd_set_low = 1,
-    .heartbeat   = 0
+    .heartbeat   = 0,
+    .mux_count   = 0,
+    .mux_pairs   = {0}
 };
 
 typedef struct {
@@ -67,20 +77,25 @@ typedef struct {
     uint16_t pin;
 } PinDef_t;
 
-/* Candidate display GPIOs on DM02i V03 (72 combinations with PA3, PB0..PB5) */
-static const PinDef_t PINS[9] = {
+/* Full candidate display GPIOs on DM02i V03 (13 pins):
+ * Port A: PA0, PA1, PA3, PA4, PA5, PA6, PA7
+ * Port B: PB0, PB1, PB2, PB3, PB4, PB5
+ */
+static const PinDef_t PINS[NUM_PINS] = {
     {GPIOA, GPIO_PIN_0}, // 0: PA0
     {GPIOA, GPIO_PIN_1}, // 1: PA1
     {GPIOA, GPIO_PIN_3}, // 2: PA3
-    {GPIOB, GPIO_PIN_0}, // 3: PB0
-    {GPIOB, GPIO_PIN_1}, // 4: PB1
-    {GPIOB, GPIO_PIN_2}, // 5: PB2
-    {GPIOB, GPIO_PIN_3}, // 6: PB3
-    {GPIOB, GPIO_PIN_4}, // 7: PB4
-    {GPIOB, GPIO_PIN_5}, // 8: PB5
+    {GPIOA, GPIO_PIN_4}, // 3: PA4
+    {GPIOA, GPIO_PIN_5}, // 4: PA5
+    {GPIOA, GPIO_PIN_6}, // 5: PA6
+    {GPIOA, GPIO_PIN_7}, // 6: PA7
+    {GPIOB, GPIO_PIN_0}, // 7: PB0
+    {GPIOB, GPIO_PIN_1}, // 8: PB1
+    {GPIOB, GPIO_PIN_2}, // 9: PB2
+    {GPIOB, GPIO_PIN_3}, // 10: PB3
+    {GPIOB, GPIO_PIN_4}, // 11: PB4
+    {GPIOB, GPIO_PIN_5}, // 12: PB5
 };
-
-#define NUM_PINS 9
 
 static volatile uint32_t s_millis = 0;
 
@@ -145,12 +160,12 @@ static void set_single_low(int low_idx) {
 static void set_pair(int high_idx, int low_idx) {
     all_pins_high_z();
 
-    /* 9 = VDD or GND marker */
-    if (high_idx == 9 && low_idx >= 0 && low_idx < NUM_PINS) {
+    /* NUM_PINS = VDD or GND marker */
+    if (high_idx == NUM_PINS && low_idx >= 0 && low_idx < NUM_PINS) {
         set_single_low(low_idx); // VDD -> Pin LOW
         return;
     }
-    if (low_idx == 9 && high_idx >= 0 && high_idx < NUM_PINS) {
+    if (low_idx == NUM_PINS && high_idx >= 0 && high_idx < NUM_PINS) {
         set_single_high(high_idx); // Pin HIGH -> GND
         return;
     }
@@ -175,15 +190,13 @@ static void set_pair(int high_idx, int low_idx) {
     HAL_GPIO_Init(PINS[high_idx].port, &GPIO_InitStruct);
 }
 
-/* Pair translation from step index (0 .. 89)
- * 0..71: All 72 pairs between the 9 pins
- * 72..80: Pin HIGH -> GND (9 steps)
- * 81..89: VDD -> Pin LOW (9 steps)
+/* Pair translation from step index (0 .. 181)
+ * 0..155: All 156 pairs between the 13 pins
+ * 156..168: Pin HIGH -> GND (13 steps)
+ * 169..181: VDD -> Pin LOW (13 steps)
  */
-#define TOTAL_STEPS 90
-
 static void get_pair_for_step(int step, int *high_idx, int *low_idx) {
-    if (step < 72) {
+    if (step < PAIR_STEPS) {
         int cur = 0;
         for (int h = 0; h < NUM_PINS; h++) {
             for (int l = 0; l < NUM_PINS; l++) {
@@ -196,13 +209,13 @@ static void get_pair_for_step(int step, int *high_idx, int *low_idx) {
                 cur++;
             }
         }
-    } else if (step < 81) {
-        *high_idx = step - 72;
-        *low_idx  = 9; // GND
+    } else if (step < PAIR_STEPS + NUM_PINS) {
+        *high_idx = step - PAIR_STEPS;
+        *low_idx  = NUM_PINS; // GND
         return;
-    } else if (step < 90) {
-        *high_idx = 9; // VDD
-        *low_idx  = step - 81;
+    } else if (step < TOTAL_STEPS) {
+        *high_idx = NUM_PINS; // VDD
+        *low_idx  = step - (PAIR_STEPS + NUM_PINS);
         return;
     }
     *high_idx = 0;
@@ -278,17 +291,6 @@ int main(void) {
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOB_CLK_ENABLE();
 
-    /* Safeguard: keep all FET coil lines (PA4..PA7, PB7) as High-Z inputs with NO PULL.
-     * Their external pull-up resistors will hold their gates at VDD, ensuring the heater coil stays 100% OFF. */
-    GPIO_InitTypeDef safe_init = {0};
-    safe_init.Mode = GPIO_MODE_INPUT;
-    safe_init.Pull = GPIO_NOPULL;
-    safe_init.Pin  = GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7;
-    HAL_GPIO_Init(GPIOA, &safe_init);
-
-    safe_init.Pin  = GPIO_PIN_7;
-    HAL_GPIO_Init(GPIOB, &safe_init);
-
     all_pins_high_z();
     adc_init();
 
@@ -346,7 +348,7 @@ int main(void) {
             last_step_time = millis();
         }
 
-        /* 4. Execution Modes: Full brightness continuous drive */
+        /* 4. Execution Modes */
         if (g_scanner.mode == 0) {
             /* Mode 0: Auto Charlieplexing Walk */
             if (!g_scanner.is_paused && (millis() - last_step_time >= g_scanner.delay_ms)) {
@@ -359,6 +361,7 @@ int main(void) {
                 set_pair(h, l);
                 g_scanner.step_idx = (g_scanner.step_idx + 1) % g_scanner.total_steps;
             }
+            delay_ms(10);
         } else if (g_scanner.mode == 1) {
             /* Mode 1: Manual Pair Hold */
             if (g_scanner.high_pin_idx != g_scanner.cmd_set_high || g_scanner.low_pin_idx != g_scanner.cmd_set_low) {
@@ -366,17 +369,36 @@ int main(void) {
                 g_scanner.low_pin_idx  = g_scanner.cmd_set_low;
                 set_pair(g_scanner.high_pin_idx, g_scanner.low_pin_idx);
             }
+            delay_ms(10);
         } else if (g_scanner.mode == 2) {
             /* Mode 2: Single Pin High */
             if (g_scanner.high_pin_idx != g_scanner.cmd_set_high) {
                 g_scanner.high_pin_idx = g_scanner.cmd_set_high;
                 set_single_high(g_scanner.high_pin_idx);
             }
+            delay_ms(10);
+        } else if (g_scanner.mode == 4) {
+            /* Mode 4: Dynamic Multiplexing of all selected pairs (Simultaneous Display) */
+            uint32_t count = g_scanner.mux_count;
+            if (count > 0) {
+                if (count > 32) count = 32;
+                for (uint32_t i = 0; i < count; i++) {
+                    uint32_t p = g_scanner.mux_pairs[i];
+                    int h = (p >> 8) & 0xFF;
+                    int l = p & 0xFF;
+                    set_pair(h, l);
+                    for (volatile int d = 0; d < 200; d++) __NOP();
+                    all_pins_high_z();
+                    for (volatile int d = 0; d < 20; d++) __NOP();
+                }
+            } else {
+                all_pins_high_z();
+                delay_ms(10);
+            }
         } else {
             /* Mode 3: All Off */
             all_pins_high_z();
+            delay_ms(10);
         }
-
-        delay_ms(10);
     }
 }
