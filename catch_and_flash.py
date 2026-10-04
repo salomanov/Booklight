@@ -15,7 +15,8 @@ def log(msg):
     print(msg, flush=True)
 
 def main():
-    bin_file = sys.argv[1] if len(sys.argv) > 1 else r"c:\Users\Salomanov\Desktop\ВЕЙП\custom_firmware\build\battery_firmware.bin"
+    default_bin = os.path.join(os.path.dirname(os.path.abspath(__file__)), "custom_firmware", "build", "battery_firmware.bin")
+    bin_file = sys.argv[1] if len(sys.argv) > 1 else default_bin
     if not os.path.exists(bin_file):
         log(f"[X] Файл прошивки не найден: {bin_file}")
         sys.exit(1)

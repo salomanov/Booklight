@@ -72,6 +72,11 @@ typedef struct {
     uint32_t btn_long_hold_ms;     // +0x6C: Long hold threshold (default 1200 ms)
     uint32_t btn_last_clicks;      // +0x70: Live clicks recognized by MCU
     uint32_t btn_last_event;       // +0x74: Live event enum recognized by MCU
+
+    /* Inactivity Sleep Timer (15 min auto-fade to OFF) */
+    uint32_t inactivity_timeout_ms; // +0x78: Inactivity timeout in ms (default 900000 = 15 min)
+    uint32_t inactivity_sec_left;   // +0x7C: Remaining seconds before fade starts
+    uint32_t is_auto_fading;        // +0x80: 1 = currently auto-fading down to minimum, 0 = normal
 } LampSharedControl_t;
 
 __attribute__((section(".data.00_lamp_shared"), aligned(4)))
@@ -110,7 +115,11 @@ volatile LampSharedControl_t g_lamp = {
     .btn_hold_time_ms     = 400,
     .btn_long_hold_ms     = 1200,
     .btn_last_clicks      = 0,
-    .btn_last_event       = 0
+    .btn_last_event       = 0,
+
+    .inactivity_timeout_ms = 900000,
+    .inactivity_sec_left   = 900,
+    .is_auto_fading        = 0
 };
 
 /* Millisecond timebase via SysTick */
@@ -299,6 +308,10 @@ int main(void)
     int8_t dim_direction = -1;             // -1 = dimming down first, +1 = brightening up
     uint32_t show_bat_until_ms = 0;        // Battery preview duration on 1-click (5 seconds)
     uint32_t show_bright_until_ms = 0;     // Brightness adjustment preview (1.5 seconds)
+    uint32_t last_touch_activity_ms = 0;   // Inactivity timer base timestamp
+    bool is_auto_fading = false;           // Active fade-to-minimum in progress
+    uint32_t auto_fade_start_ms = 0;       // Timestamp when auto-fade started
+    uint32_t auto_fade_start_pct = 50;     // Brightness level before fade started
     uint32_t last_swd_fil_target = 0;
     uint32_t last_swd_led_target = 0;
     uint32_t last_disp_ms = 0;
@@ -315,6 +328,22 @@ int main(void)
         /* A. Read capacitive touch sensor (TTP223 on PB4: HIGH = Finger touched) */
         bool is_touched = (GPIOB->IDR & (1U << 4)) != 0;
         g_lamp.touch_raw = is_touched ? 1 : 0;
+
+        if (is_touched)
+        {
+            if (is_auto_fading)
+            {
+                /* Touch detected during auto-fade: cancel fade and restore saved brightness */
+                is_auto_fading = false;
+                g_lamp.fil_state = 1;
+                g_lamp.fil_target_pct = g_lamp.fil_saved_pct;
+                last_swd_fil_target = g_lamp.fil_saved_pct;
+                uint8_t byte_val = (uint8_t)((g_lamp.fil_saved_pct * 255U) / 100U);
+                gled_fade(&fil_led, byte_val, g_lamp.fade_time_ms);
+                ubutton_reset(&touch_btn);
+            }
+            last_touch_activity_ms = now;
+        }
 
         /* Dynamic button timing configuration from SWD */
         if (g_lamp.btn_click_timeout_ms >= 50 && g_lamp.btn_click_timeout_ms <= 2000)
@@ -353,6 +382,7 @@ int main(void)
                     gled_fade(&fil_led, 0, g_lamp.fade_time_ms);
                     show_bat_until_ms = 0;
                     show_bright_until_ms = 0;
+                    is_auto_fading = false;
                 }
                 else
                 {
@@ -365,6 +395,8 @@ int main(void)
                     dim_direction = -1; /* Always dim DOWN first on subsequent hold */
                     show_bat_until_ms = 0;
                     show_bright_until_ms = 0; /* Keep screen OFF when turning ON */
+                    is_auto_fading = false;
+                    last_touch_activity_ms = now;
                 }
             }
 
@@ -373,6 +405,8 @@ int main(void)
             {
                 if (g_lamp.fil_state)
                 {
+                    is_auto_fading = false;
+                    last_touch_activity_ms = now;
                     show_bat_until_ms = 0;
                     show_bright_until_ms = now + 1500; /* Show brightness while adjusting + 1.5s after */
 
@@ -407,10 +441,13 @@ int main(void)
             {
                 g_lamp.fil_state = 1;
                 g_lamp.fil_saved_pct = last_swd_fil_target;
+                last_touch_activity_ms = now;
+                is_auto_fading = false;
             }
             else
             {
                 g_lamp.fil_state = 0;
+                is_auto_fading = false;
             }
             uint8_t byte_val = (uint8_t)((last_swd_fil_target * 255U) / 100U);
             gled_fade(&fil_led, byte_val, g_lamp.fade_time_ms);
@@ -452,7 +489,67 @@ int main(void)
         g_lamp.led_current_pct = (uint32_t)((board_led.current * 100U + 127U) / 255U);
         g_lamp.led_pwm_raw     = TIM1->CCR1;
 
-        /* H. Sample Battery & Charge Status every 300 ms */
+        /* H. Inactivity sleep timer: 15 minutes without touching sensor -> 60s soft fade to minimum -> OFF */
+        if (g_lamp.fil_state)
+        {
+            uint32_t timeout = (g_lamp.inactivity_timeout_ms >= 5000) ? g_lamp.inactivity_timeout_ms : 900000U;
+            uint32_t elapsed = now - last_touch_activity_ms;
+
+            if (!is_auto_fading)
+            {
+                if (elapsed < timeout)
+                {
+                    g_lamp.inactivity_sec_left = (timeout - elapsed) / 1000U;
+                }
+                else
+                {
+                    /* 15 minutes of inactivity reached: begin soft fade-down */
+                    is_auto_fading = true;
+                    auto_fade_start_ms = now;
+                    auto_fade_start_pct = (g_lamp.fil_current_pct > 0) ? g_lamp.fil_current_pct : g_lamp.fil_saved_pct;
+                    g_lamp.inactivity_sec_left = 0;
+                }
+            }
+            else
+            {
+                /* Auto-fading down over 60 seconds */
+                uint32_t fade_elapsed = now - auto_fade_start_ms;
+                uint32_t fade_duration = 60000U; /* 1 minute = 60,000 ms */
+
+                if (fade_elapsed >= fade_duration)
+                {
+                    /* Reached minimum and 60 seconds elapsed -> complete shut OFF */
+                    is_auto_fading = false;
+                    g_lamp.fil_state = 0;
+                    g_lamp.fil_target_pct = 0;
+                    last_swd_fil_target = 0;
+                    gled_fade(&fil_led, 0, 100);
+                    TIM1->CCR3 = 0;
+                    g_lamp.inactivity_sec_left = 0;
+                }
+                else
+                {
+                    /* Linearly decrease to minimum (1%) */
+                    uint32_t rem = (auto_fade_start_pct * (fade_duration - fade_elapsed)) / fade_duration;
+                    if (rem < 1) rem = 1; /* Stay at minimum 1% until 60s finishes */
+
+                    g_lamp.fil_target_pct = rem;
+                    last_swd_fil_target = rem;
+                    uint8_t byte_val = (uint8_t)((rem * 255U) / 100U);
+                    gled_fade(&fil_led, byte_val, 100);
+                    g_lamp.inactivity_sec_left = 0;
+                }
+            }
+        }
+        else
+        {
+            last_touch_activity_ms = now;
+            is_auto_fading = false;
+            g_lamp.inactivity_sec_left = 0;
+        }
+        g_lamp.is_auto_fading = is_auto_fading ? 1 : 0;
+
+        /* I. Sample Battery & Charge Status every 300 ms */
         if (now - last_bat_ms >= 300)
         {
             last_bat_ms = now;
