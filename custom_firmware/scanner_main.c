@@ -44,7 +44,7 @@ typedef struct {
     uint32_t mux_pairs[32];  // +0x48 .. +0xC4: packed (high << 8) | low
 } __attribute__((aligned(4))) ScannerShared_t;
 
-#define NUM_PINS 8
+#define NUM_PINS 6
 #define DISPLAY_PINS 6
 #define TOTAL_STEPS (DISPLAY_PINS * (DISPLAY_PINS - 1)) // Exactly 30 steps!
 
@@ -77,16 +77,14 @@ typedef struct {
     uint16_t pin;
 } PinDef_t;
 
-/* 6 Display Lines (Physical pins 9 to 14 of QFN-16) + 2 alternate candidate lines */
+/* Exact 6 display lines on DM02i V03 (QFN-16 physical legs 14 to 9) */
 static const PinDef_t PINS[NUM_PINS] = {
-    {GPIOB, GPIO_PIN_0}, // 0: PB0 (Пин 14)
-    {GPIOB, GPIO_PIN_1}, // 1: PB1 (Пин 13)
-    {GPIOB, GPIO_PIN_2}, // 2: PB2 (Пин 12)
-    {GPIOB, GPIO_PIN_3}, // 3: PB3 (Пин 11)
-    {GPIOB, GPIO_PIN_4}, // 4: PB4 (Пин 10)
-    {GPIOB, GPIO_PIN_5}, // 5: PB5 (Пин 9)
-    {GPIOA, GPIO_PIN_1}, // 6: Alt PA1
-    {GPIOA, GPIO_PIN_0}, // 7: Alt PA0
+    {GPIOB, GPIO_PIN_0}, // 0: PB0 (Контакт 1 / Нога 14)
+    {GPIOB, GPIO_PIN_1}, // 1: PB1 (Контакт 2 / Нога 13)
+    {GPIOB, GPIO_PIN_2}, // 2: PB2 (Контакт 3 / Нога 12)
+    {GPIOB, GPIO_PIN_3}, // 3: PB3 (Контакт 4 / Нога 11)
+    {GPIOB, GPIO_PIN_5}, // 4: PB5 (Контакт 5 / Нога 10)
+    {GPIOC, GPIO_PIN_1}, // 5: PC1 (Контакт 6 / Нога 9)
 };
 
 static volatile uint32_t s_millis = 0;
@@ -262,8 +260,8 @@ int main(void) {
     DBGMCU->CR |= DBGMCU_CR_DBG_STOP;
     DBGMCU->APBFZ1 |= 0xFFFFFFFF;
 
-    /* 3. Enable Clocks: GPIOA, GPIOB */
-    RCC->IOPENR |= RCC_IOPENR_GPIOAEN | RCC_IOPENR_GPIOBEN;
+    /* 3. Enable Clocks: GPIOA, GPIOB, GPIOC */
+    RCC->IOPENR |= RCC_IOPENR_GPIOAEN | RCC_IOPENR_GPIOBEN | RCC_IOPENR_GPIOCEN;
 
     /* 4. SysTick 1 ms */
     SysTick_Config(SystemCoreClock / 1000U);
@@ -271,6 +269,7 @@ int main(void) {
     /* Enable GPIO Port clocks */
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOB_CLK_ENABLE();
+    __HAL_RCC_GPIOC_CLK_ENABLE();
 
     all_pins_high_z();
     adc_init();
