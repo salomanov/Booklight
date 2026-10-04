@@ -41,12 +41,28 @@ from PyQt6.QtGui import QFont, QColor
 import pylink
 
 # Shared memory in SRAM
-SCANNER_ADDR = 0x20000004
+SCANNER_ADDR = 0x2000000C
 
 PIN_NAMES = [
-    "PA0", "PA1", "PA3", "PA4", "PA5", "PA6", "PA7",
-    "PB0", "PB1", "PB2", "PB3", "PB4", "PB5"
+    "PB0 (Пин 14)",
+    "PB1 (Пин 13)",
+    "PB2 (Пин 12)",
+    "PB3 (Пин 11)",
+    "PB4 (Пин 10)",
+    "PB5 (Пин 9)",
+    "PA1 (Альт)",
+    "PA0 (Альт)"
 ]
+
+def normalize_pin_name(name):
+    if not name:
+        return PIN_NAMES[0]
+    for p in PIN_NAMES:
+        # Match 'PB5' with 'PB5 (Пин 9)' or exact
+        base_p = p.split()[0]
+        if name == base_p or name == p or name in p:
+            return p
+    return name
 
 MAP_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dm02i_screen_map.json")
 
@@ -68,7 +84,7 @@ class SwdWorker(QThread):
 
     def run(self):
         j = None
-        base = SCANNER_ADDR
+        base = None
         fail_count = 0
 
         while self.running:
@@ -89,8 +105,21 @@ class SwdWorker(QThread):
                     j.coresight_write(1, 0x50000000, ap=False) # Power-up DP
                     j.coresight_write(2, 0x00000000, ap=False) # Select AP 0 Bank 0
                     j.coresight_write(0, 0x23000002, ap=True)  # CSW 32-bit transfer
+                    
+                    # Auto-detect g_scanner base address
+                    base = None
+                    for cand in [0x2000000C, 0x20000000, 0x20000004, 0x20000008, 0x20000010]:
+                        j.coresight_write(1, cand, ap=True)
+                        j.coresight_read(3, ap=True) # dummy
+                        val = j.coresight_read(3, ap=True)
+                        if val == 0x5343414E:
+                            base = cand
+                            break
+                    if base is None:
+                        base = 0x2000000C
+                    
                     fail_count = 0
-                    self.connection_changed.emit(True, f"Подключено: J-Link {j.serial_number} (1000 кГц, прямой SWD)")
+                    self.connection_changed.emit(True, f"Подключено: J-Link {j.serial_number} (1000 кГц, ОЗУ: 0x{base:08X})")
                 except Exception as e:
                     if j:
                         try:
@@ -249,7 +278,14 @@ class DM02iStudio(QMainWindow):
         if os.path.exists(MAP_FILE):
             try:
                 with open(MAP_FILE, 'r', encoding='utf-8') as f:
-                    self.screen_map = json.load(f)
+                    raw_map = json.load(f)
+                    self.screen_map = {}
+                    for k, v in raw_map.items():
+                        self.screen_map[k] = {
+                            'high': normalize_pin_name(v.get('high', '')),
+                            'low': normalize_pin_name(v.get('low', '')),
+                            'step': v.get('step', 0)
+                        }
             except Exception:
                 self.screen_map = {}
 
@@ -745,8 +781,8 @@ class DM02iStudio(QMainWindow):
     def trigger_multiplex(self):
         pairs = []
         for name, item in self.screen_map.items():
-            h_name = item.get('high')
-            l_name = item.get('low')
+            h_name = normalize_pin_name(item.get('high', ''))
+            l_name = normalize_pin_name(item.get('low', ''))
             if h_name in PIN_NAMES and l_name in PIN_NAMES:
                 h_idx = PIN_NAMES.index(h_name)
                 l_idx = PIN_NAMES.index(l_name)

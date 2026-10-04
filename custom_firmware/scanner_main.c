@@ -44,9 +44,9 @@ typedef struct {
     uint32_t mux_pairs[32];  // +0x48 .. +0xC4: packed (high << 8) | low
 } __attribute__((aligned(4))) ScannerShared_t;
 
-#define NUM_PINS 13
-#define PAIR_STEPS (NUM_PINS * (NUM_PINS - 1)) // 156
-#define TOTAL_STEPS (PAIR_STEPS + NUM_PINS + NUM_PINS) // 182
+#define NUM_PINS 8
+#define DISPLAY_PINS 6
+#define TOTAL_STEPS (DISPLAY_PINS * (DISPLAY_PINS - 1)) // Exactly 30 steps!
 
 /* Pinned strictly to start of SRAM 0x20000000 */
 __attribute__((section(".shared_data")))
@@ -77,24 +77,16 @@ typedef struct {
     uint16_t pin;
 } PinDef_t;
 
-/* Full candidate display GPIOs on DM02i V03 (13 pins):
- * Port A: PA0, PA1, PA3, PA4, PA5, PA6, PA7
- * Port B: PB0, PB1, PB2, PB3, PB4, PB5
- */
+/* 6 Display Lines (Physical pins 9 to 14 of QFN-16) + 2 alternate candidate lines */
 static const PinDef_t PINS[NUM_PINS] = {
-    {GPIOA, GPIO_PIN_0}, // 0: PA0
-    {GPIOA, GPIO_PIN_1}, // 1: PA1
-    {GPIOA, GPIO_PIN_3}, // 2: PA3
-    {GPIOA, GPIO_PIN_4}, // 3: PA4
-    {GPIOA, GPIO_PIN_5}, // 4: PA5
-    {GPIOA, GPIO_PIN_6}, // 5: PA6
-    {GPIOA, GPIO_PIN_7}, // 6: PA7
-    {GPIOB, GPIO_PIN_0}, // 7: PB0
-    {GPIOB, GPIO_PIN_1}, // 8: PB1
-    {GPIOB, GPIO_PIN_2}, // 9: PB2
-    {GPIOB, GPIO_PIN_3}, // 10: PB3
-    {GPIOB, GPIO_PIN_4}, // 11: PB4
-    {GPIOB, GPIO_PIN_5}, // 12: PB5
+    {GPIOB, GPIO_PIN_0}, // 0: PB0 (Пин 14)
+    {GPIOB, GPIO_PIN_1}, // 1: PB1 (Пин 13)
+    {GPIOB, GPIO_PIN_2}, // 2: PB2 (Пин 12)
+    {GPIOB, GPIO_PIN_3}, // 3: PB3 (Пин 11)
+    {GPIOB, GPIO_PIN_4}, // 4: PB4 (Пин 10)
+    {GPIOB, GPIO_PIN_5}, // 5: PB5 (Пин 9)
+    {GPIOA, GPIO_PIN_1}, // 6: Alt PA1
+    {GPIOA, GPIO_PIN_0}, // 7: Alt PA0
 };
 
 static volatile uint32_t s_millis = 0;
@@ -190,33 +182,22 @@ static void set_pair(int high_idx, int low_idx) {
     HAL_GPIO_Init(PINS[high_idx].port, &GPIO_InitStruct);
 }
 
-/* Pair translation from step index (0 .. 181)
- * 0..155: All 156 pairs between the 13 pins
- * 156..168: Pin HIGH -> GND (13 steps)
- * 169..181: VDD -> Pin LOW (13 steps)
+/* Pair translation from step index (0 .. 29)
+ * Exactly 30 pairs between the 6 display lines (Pins 9 to 14)
  */
 static void get_pair_for_step(int step, int *high_idx, int *low_idx) {
-    if (step < PAIR_STEPS) {
-        int cur = 0;
-        for (int h = 0; h < NUM_PINS; h++) {
-            for (int l = 0; l < NUM_PINS; l++) {
-                if (h == l) continue;
-                if (cur == step) {
-                    *high_idx = h;
-                    *low_idx  = l;
-                    return;
-                }
-                cur++;
+    if (step >= TOTAL_STEPS || step < 0) step = 0;
+    int cur = 0;
+    for (int h = 0; h < DISPLAY_PINS; h++) {
+        for (int l = 0; l < DISPLAY_PINS; l++) {
+            if (h == l) continue;
+            if (cur == step) {
+                *high_idx = h;
+                *low_idx  = l;
+                return;
             }
+            cur++;
         }
-    } else if (step < PAIR_STEPS + NUM_PINS) {
-        *high_idx = step - PAIR_STEPS;
-        *low_idx  = NUM_PINS; // GND
-        return;
-    } else if (step < TOTAL_STEPS) {
-        *high_idx = NUM_PINS; // VDD
-        *low_idx  = step - (PAIR_STEPS + NUM_PINS);
-        return;
     }
     *high_idx = 0;
     *low_idx = 1;
@@ -364,9 +345,12 @@ int main(void) {
             delay_ms(10);
         } else if (g_scanner.mode == 1) {
             /* Mode 1: Manual Pair Hold */
-            if (g_scanner.high_pin_idx != g_scanner.cmd_set_high || g_scanner.low_pin_idx != g_scanner.cmd_set_low) {
-                g_scanner.high_pin_idx = g_scanner.cmd_set_high;
-                g_scanner.low_pin_idx  = g_scanner.cmd_set_low;
+            static uint32_t last_m1_h = 0xFF, last_m1_l = 0xFF;
+            if (last_m1_h != g_scanner.cmd_set_high || last_m1_l != g_scanner.cmd_set_low) {
+                last_m1_h = g_scanner.cmd_set_high;
+                last_m1_l = g_scanner.cmd_set_low;
+                g_scanner.high_pin_idx = last_m1_h;
+                g_scanner.low_pin_idx  = last_m1_l;
                 set_pair(g_scanner.high_pin_idx, g_scanner.low_pin_idx);
             }
             delay_ms(10);
