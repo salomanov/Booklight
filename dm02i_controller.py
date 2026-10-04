@@ -14,7 +14,7 @@ import pylink
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGridLayout, QLabel, QPushButton, QSlider, QRadioButton, 
-    QButtonGroup, QFrame, QGroupBox, QSpinBox
+    QButtonGroup, QFrame, QGroupBox, QSpinBox, QCheckBox
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QColor
@@ -100,7 +100,6 @@ class SwdWorker(QThread):
         self.cmd_queue = queue.Queue()
 
     def set_pairs(self, pairs_list):
-        # Очищаем старые очереди, если накопились
         while not self.cmd_queue.empty():
             try:
                 self.cmd_queue.get_nowait()
@@ -152,7 +151,6 @@ class SwdWorker(QThread):
                     self.msleep(1000)
                     continue
 
-            # Обработка команд
             try:
                 target_pairs = None
                 while not self.cmd_queue.empty():
@@ -171,11 +169,11 @@ class SwdWorker(QThread):
                         j.coresight_write(1, base + 0x48 + (i * 4), ap=True)
                         j.coresight_write(3, target_pairs[i], ap=True)
 
-                    # Режим 4: Мультиплексинг
+                    # Режим 4: Мультиплексинг (или 3 = All Off если count == 0)
                     j.coresight_write(1, base + 0x04, ap=True)
                     j.coresight_write(3, 4 if count > 0 else 3, ap=True)
 
-                # Периодическое чтение телеметрии (раз в ~300 мс)
+                # Периодическое чтение телеметрии
                 j.coresight_write(1, base + 0x28, ap=True) # vdd_mv
                 j.coresight_read(3, ap=True)
                 vdd = j.coresight_read(3, ap=True)
@@ -207,15 +205,16 @@ class DM02iController(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("DM02i Display Controller - Обучающая панель экрана вейпа")
-        self.resize(1080, 800)
+        self.resize(1120, 820)
 
         # Состояния элементов
         self.percent_val = 100
         self.percent_show = True
         self.liquid_bars = 3
         
-        # Режимы капли: 0=выкл, 1=вкл (все 5), 2=центр, 3=анимация вращения, 4=пульс
-        self.drop_mode = 1
+        # Капля: раздельные независимые элементы (Центр и Обводка)
+        self.drop_center_on = True
+        self.drop_rim_mode = 1 # 0=выкл, 1=горит статично, 2=вращение
         self.drop_anim_frame = 0
 
         # Режимы молнии: 0=выкл, 1=вкл, 2=моргание
@@ -269,7 +268,7 @@ class DM02iController(QMainWindow):
         title_box = QVBoxLayout()
         h_title = QLabel("DM02i V03 — УМНЫЙ КОНТРОЛЛЕР ДИСПЛЕЯ")
         h_title.setStyleSheet("color: #a5b4fc; font-size: 18px; font-weight: bold; letter-spacing: 1px;")
-        h_sub = QLabel("Обучающая панель управления всеми 30 элементами матрицы Charlieplexing")
+        h_sub = QLabel("Раздельное управление каплей, обводкой, индикаторами и ползунком процентов")
         h_sub.setStyleSheet("color: #94a3b8; font-size: 12px;")
         title_box.addWidget(h_title)
         title_box.addWidget(h_sub)
@@ -297,7 +296,7 @@ class DM02iController(QMainWindow):
 
         # Рамка экрана
         self.screen_frame = QFrame()
-        self.screen_frame.setFixedSize(380, 540)
+        self.screen_frame.setFixedSize(380, 560)
         self.screen_frame.setStyleSheet("""
             background: #020617;
             border: 4px solid #334155;
@@ -307,15 +306,21 @@ class DM02iController(QMainWindow):
         s_layout.setContentsMargins(20, 25, 20, 25)
         s_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        # Верхний блок: Капля и Полоски жидкости
+        # Верхний блок: Капля (Центр + Обводка) и Полоски жидкости
         top_screen = QHBoxLayout()
         top_screen.setSpacing(15)
 
-        # Капля
-        self.lbl_v_drop = QLabel("💧")
-        self.lbl_v_drop.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_v_drop.setStyleSheet("font-size: 64px; color: #38bdf8;")
-        top_screen.addWidget(self.lbl_v_drop)
+        # Капля (Визуализация)
+        drop_v_box = QVBoxLayout()
+        drop_v_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_v_drop_rim = QLabel("◯")
+        self.lbl_v_drop_rim.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_v_drop_rim.setStyleSheet("font-size: 60px; color: #38bdf8; font-weight: bold;")
+        self.lbl_v_drop_info = QLabel("Капля: Центр + Ободок")
+        self.lbl_v_drop_info.setStyleSheet("color: #94a3b8; font-size: 11px;")
+        drop_v_box.addWidget(self.lbl_v_drop_rim)
+        drop_v_box.addWidget(self.lbl_v_drop_info)
+        top_screen.addLayout(drop_v_box)
 
         # Полоски жидкости
         bars_box = QVBoxLayout()
@@ -330,7 +335,7 @@ class DM02iController(QMainWindow):
         top_screen.addLayout(bars_box)
         s_layout.addLayout(top_screen)
 
-        s_layout.addSpacing(20)
+        s_layout.addSpacing(15)
 
         # Средний блок: Число процентов и значок %
         num_box = QHBoxLayout()
@@ -372,9 +377,16 @@ class DM02iController(QMainWindow):
         right_box.setSpacing(12)
 
         # ГРУППА 1: Проценты (0..100)
-        grp_percent = QGroupBox("🔢 Управление процентами (0 .. 100%)")
+        grp_percent = QGroupBox("🔢 Управление процентами и дисплеем (0 .. 100%)")
         grp_percent.setStyleSheet("QGroupBox { font-weight: bold; color: #a5b4fc; border: 1px solid #475569; border-radius: 8px; margin-top: 6px; padding-top: 10px; }")
         p_layout = QVBoxLayout(grp_percent)
+
+        # Чекбокс включения дисплея цифр (чтобы при выключении не оставалось 0%)
+        self.chk_percent_show = QCheckBox("Включить отображение цифр и знака %")
+        self.chk_percent_show.setChecked(True)
+        self.chk_percent_show.setStyleSheet("font-size: 13px; font-weight: bold; color: #cbd5e1;")
+        self.chk_percent_show.toggled.connect(self.on_percent_show_toggled)
+        p_layout.addWidget(self.chk_percent_show)
 
         p_row = QHBoxLayout()
         self.slider_pct = QSlider(Qt.Orientation.Horizontal)
@@ -397,10 +409,10 @@ class DM02iController(QMainWindow):
         for v in [0, 25, 50, 75, 99, 100]:
             btn = QPushButton(f"{v}%")
             btn.setStyleSheet("padding: 4px 8px; font-size: 11px;")
-            btn.clicked.connect(lambda _, val=v: self.slider_pct.setValue(val))
+            btn.clicked.connect(lambda _, val=v: self.set_percent_and_enable(val))
             btn_p_box.addWidget(btn)
 
-        self.btn_demo_pct = QPushButton("🔄 Автосчётчик (0-100)")
+        self.btn_demo_pct = QPushButton("🔄 Автосчётчик")
         self.btn_demo_pct.setCheckable(True)
         self.btn_demo_pct.clicked.connect(self.toggle_demo_pct)
         btn_p_box.addWidget(self.btn_demo_pct)
@@ -408,11 +420,12 @@ class DM02iController(QMainWindow):
 
         right_box.addWidget(grp_percent)
 
-        # ГРУППА 2: Деления жидкости и Капля
-        grp_liquid = QGroupBox("💧 Жидкость: Полоски (0..3) и Капля")
+        # ГРУППА 2: Деления жидкости и РАЗДЕЛЬНАЯ КАПЛЯ
+        grp_liquid = QGroupBox("💧 Жидкость: Полоски (0..3) и Раздельная Капля")
         grp_liquid.setStyleSheet("QGroupBox { font-weight: bold; color: #38bdf8; border: 1px solid #475569; border-radius: 8px; margin-top: 6px; padding-top: 10px; }")
         l_layout = QVBoxLayout(grp_liquid)
 
+        # Полоски
         bar_row = QHBoxLayout()
         bar_row.addWidget(QLabel("Деления жидкости (0..3):"))
         self.slider_bars = QSlider(Qt.Orientation.Horizontal)
@@ -425,26 +438,37 @@ class DM02iController(QMainWindow):
         bar_row.addWidget(self.lbl_bars_txt)
         l_layout.addLayout(bar_row)
 
-        # Режимы капли
-        drop_row = QHBoxLayout()
-        drop_row.addWidget(QLabel("Режим капли:"))
-        self.bg_drop = QButtonGroup(self)
-        r_drop_off  = QRadioButton("Выкл")
-        r_drop_on   = QRadioButton("Вся капля")
-        r_drop_cent = QRadioButton("Только центр")
-        r_drop_spin = QRadioButton("🌀 Вращение ободка")
+        # РАЗДЕЛЬНОЕ УПРАВЛЕНИЕ КАПЛЕЙ:
+        drop_sep_frame = QFrame()
+        drop_sep_frame.setStyleSheet("background: #0f172a; border-radius: 6px; padding: 6px;")
+        ds_layout = QVBoxLayout(drop_sep_frame)
+
+        # 1. Чекбокс центральной капли
+        self.chk_drop_center = QCheckBox("💧 Центральная капля (точечный центр)")
+        self.chk_drop_center.setChecked(True)
+        self.chk_drop_center.setStyleSheet("font-size: 13px; font-weight: bold; color: #38bdf8;")
+        self.chk_drop_center.toggled.connect(self.on_drop_center_toggled)
+        ds_layout.addWidget(self.chk_drop_center)
+
+        # 2. Обводка (ободок) капли: переключатель
+        rim_row = QHBoxLayout()
+        rim_row.addWidget(QLabel("Ободок капли:"))
+        self.bg_drop_rim = QButtonGroup(self)
+        r_rim_off  = QRadioButton("Выкл")
+        r_rim_on   = QRadioButton("Горит статично (все 4)")
+        r_rim_spin = QRadioButton("🌀 Бегущий огонёк по кругу")
         
-        self.bg_drop.addButton(r_drop_off, 0)
-        self.bg_drop.addButton(r_drop_on, 1)
-        self.bg_drop.addButton(r_drop_cent, 2)
-        self.bg_drop.addButton(r_drop_spin, 3)
-        r_drop_on.setChecked(True)
-        self.bg_drop.idToggled.connect(self.on_drop_mode_changed)
+        self.bg_drop_rim.addButton(r_rim_off, 0)
+        self.bg_drop_rim.addButton(r_rim_on, 1)
+        self.bg_drop_rim.addButton(r_rim_spin, 2)
+        r_rim_on.setChecked(True)
+        self.bg_drop_rim.idToggled.connect(self.on_drop_rim_mode_changed)
 
-        for r in [r_drop_off, r_drop_on, r_drop_cent, r_drop_spin]:
-            drop_row.addWidget(r)
-        l_layout.addLayout(drop_row)
+        for r in [r_rim_off, r_rim_on, r_rim_spin]:
+            rim_row.addWidget(r)
+        ds_layout.addLayout(rim_row)
 
+        l_layout.addWidget(drop_sep_frame)
         right_box.addWidget(grp_liquid)
 
         # ГРУППА 3: Молния ⚡ и Индикатор BOOST 🚀
@@ -507,7 +531,7 @@ class DM02iController(QMainWindow):
         btn_all_on.setStyleSheet("background: #4338ca; font-weight: bold; padding: 8px;")
         btn_all_on.clicked.connect(self.scen_all_on)
 
-        btn_all_off = QPushButton("🌑 Погасить экран")
+        btn_all_off = QPushButton("🌑 Полностью погасить экран (0)")
         btn_all_off.setStyleSheet("background: #334155; font-weight: bold; padding: 8px;")
         btn_all_off.clicked.connect(self.scen_all_off)
 
@@ -531,8 +555,15 @@ class DM02iController(QMainWindow):
             self.lbl_status.setStyleSheet("color: #ef4444; font-size: 13px; font-weight: bold;")
 
     def on_telemetry(self, vdd, hb):
-        # При желании можно отображать вольтаж
         pass
+
+    def on_percent_show_toggled(self, checked):
+        self.percent_show = checked
+        self.update_display()
+
+    def set_percent_and_enable(self, val):
+        self.chk_percent_show.setChecked(True)
+        self.slider_pct.setValue(val)
 
     def on_slider_pct_changed(self, val):
         self.percent_val = val
@@ -541,6 +572,7 @@ class DM02iController(QMainWindow):
     def toggle_demo_pct(self, checked):
         self.demo_counter = checked
         if checked:
+            self.chk_percent_show.setChecked(True)
             self.btn_demo_pct.setStyleSheet("background: #16a34a; font-weight: bold;")
         else:
             self.btn_demo_pct.setStyleSheet("")
@@ -550,9 +582,13 @@ class DM02iController(QMainWindow):
         self.lbl_bars_txt.setText(f"{val} полоски" if val > 0 else "0 (Пусто)")
         self.update_display()
 
-    def on_drop_mode_changed(self, btn_id, checked):
+    def on_drop_center_toggled(self, checked):
+        self.drop_center_on = checked
+        self.update_display()
+
+    def on_drop_rim_mode_changed(self, btn_id, checked):
         if checked:
-            self.drop_mode = btn_id
+            self.drop_rim_mode = btn_id
             self.update_display()
 
     def on_lightning_mode_changed(self, btn_id, checked):
@@ -568,29 +604,36 @@ class DM02iController(QMainWindow):
     # --- СЦЕНАРИИ ---
     def scen_puff(self):
         """Имитация затяжки: турбо-буст + вращение капли"""
-        self.bg_drop.button(3).setChecked(True) # Вращение капли
-        self.bg_boost.button(3).setChecked(True) # Турбо раскрутка
-        self.bg_ln.button(0).setChecked(True) # Молния выкл
+        self.chk_percent_show.setChecked(True)
+        self.bg_drop_rim.button(2).setChecked(True) # Вращение ободка
+        self.bg_boost.button(3).setChecked(True)    # Турбо раскрутка
+        self.bg_ln.button(0).setChecked(True)       # Молния выкл
         self.slider_pct.setValue(max(0, self.percent_val - 1)) # -1% на затяжку
 
     def scen_charging(self):
         """Режим зарядки: моргание молнии + заполнение батареи"""
-        self.bg_ln.button(2).setChecked(True) # Моргание молнии
-        self.bg_drop.button(1).setChecked(True) # Капля горит
-        self.bg_boost.button(0).setChecked(True) # Буст выкл
+        self.chk_percent_show.setChecked(True)
+        self.bg_ln.button(2).setChecked(True)       # Моргание молнии
+        self.chk_drop_center.setChecked(True)       # Капля горит
+        self.bg_drop_rim.button(1).setChecked(True) # Ободок горит
+        self.bg_boost.button(0).setChecked(True)    # Буст выкл
         self.slider_pct.setValue(min(100, self.percent_val + 5))
 
     def scen_all_on(self):
+        self.chk_percent_show.setChecked(True)
         self.slider_pct.setValue(100)
         self.slider_bars.setValue(3)
-        self.bg_drop.button(1).setChecked(True)
+        self.chk_drop_center.setChecked(True)
+        self.bg_drop_rim.button(1).setChecked(True)
         self.bg_ln.button(1).setChecked(True)
         self.bg_boost.button(1).setChecked(True)
 
     def scen_all_off(self):
-        self.slider_pct.setValue(0)
+        """Полное погашение экрана: выключает проценты, жидкость, каплю, молнию и буст"""
+        self.chk_percent_show.setChecked(False) # Никаких цифр и никаких 0%
         self.slider_bars.setValue(0)
-        self.bg_drop.button(0).setChecked(True)
+        self.chk_drop_center.setChecked(False)
+        self.bg_drop_rim.button(0).setChecked(True)
         self.bg_ln.button(0).setChecked(True)
         self.bg_boost.button(0).setChecked(True)
 
@@ -599,12 +642,12 @@ class DM02iController(QMainWindow):
         need_update = False
 
         # Демо счётчик
-        if self.demo_counter:
+        if self.demo_counter and self.percent_show:
             nv = (self.percent_val + 1) % 101
             self.slider_pct.setValue(nv)
 
-        # Анимация капли (вращение)
-        if self.drop_mode == 3:
+        # Анимация вращения ободка капли
+        if self.drop_rim_mode == 2:
             self.drop_anim_frame = (self.drop_anim_frame + 1) % 4
             need_update = True
 
@@ -613,7 +656,7 @@ class DM02iController(QMainWindow):
             self.lightning_state = not self.lightning_state if (time.time() % 0.8 < 0.4) else self.lightning_state
             need_update = True
 
-        # BOOST: моргание или вращение
+        # BOOST: моргание или турбо вращение
         if self.boost_mode == 2:
             self.boost_blink_state = (time.time() % 0.6 < 0.3)
             need_update = True
@@ -628,33 +671,36 @@ class DM02iController(QMainWindow):
     def update_display(self):
         pairs = []
 
-        # 1. Цифры и Проценты
-        val = self.percent_val
+        # 1. Цифры и Проценты (ЕСЛИ ВКЛЮЧЕНЫ)
         if self.percent_show:
+            val = self.percent_val
             pairs.append(SEGS['percent'])
             self.lbl_v_percent.setVisible(True)
-        else:
-            self.lbl_v_percent.setVisible(False)
 
-        if val >= 100:
-            pairs.append(SEGS['hundred_top'])
-            pairs.append(SEGS['hundred_bot'])
-            d1_segs = FONT_7SEG[0]
-            d2_segs = FONT_7SEG[0]
-            self.lbl_v_hundred.setVisible(True)
-            self.lbl_v_digits.setText("00")
+            if val >= 100:
+                pairs.append(SEGS['hundred_top'])
+                pairs.append(SEGS['hundred_bot'])
+                d1_segs = FONT_7SEG[0]
+                d2_segs = FONT_7SEG[0]
+                self.lbl_v_hundred.setVisible(True)
+                self.lbl_v_digits.setText("00")
+            else:
+                self.lbl_v_hundred.setVisible(False)
+                d1 = val // 10
+                d2 = val % 10
+                d1_segs = FONT_7SEG[d1] if val >= 10 else []
+                d2_segs = FONT_7SEG[d2]
+                self.lbl_v_digits.setText(f"{val:02d}" if val >= 10 else f"{val}")
+
+            for s in d1_segs:
+                pairs.append(SEGS[f'd1_{s}'])
+            for s in d2_segs:
+                pairs.append(SEGS[f'd2_{s}'])
         else:
+            # Дисплей цифр полностью погашен
             self.lbl_v_hundred.setVisible(False)
-            d1 = val // 10
-            d2 = val % 10
-            d1_segs = FONT_7SEG[d1] if val >= 10 else []
-            d2_segs = FONT_7SEG[d2]
-            self.lbl_v_digits.setText(f"{val:02d}" if val >= 10 else f"{val}")
-
-        for s in d1_segs:
-            pairs.append(SEGS[f'd1_{s}'])
-        for s in d2_segs:
-            pairs.append(SEGS[f'd2_{s}'])
+            self.lbl_v_digits.setText("")
+            self.lbl_v_percent.setVisible(False)
 
         # 2. Полоски жидкости
         self.lbl_v_bar1.setStyleSheet("color: #38bdf8;" if self.liquid_bars >= 1 else "color: #1e293b;")
@@ -665,27 +711,42 @@ class DM02iController(QMainWindow):
         if self.liquid_bars >= 2: pairs.append(SEGS['bar2'])
         if self.liquid_bars >= 3: pairs.append(SEGS['bar3'])
 
-        # 3. Капля
-        # 0=выкл, 1=вкл (все 5), 2=центр, 3=анимация вращения
-        if self.drop_mode == 1:
-            pairs.extend([SEGS['drop_center'], SEGS['drop_top'], SEGS['drop_right'], SEGS['drop_bot'], SEGS['drop_left']])
-            self.lbl_v_drop.setText("💧")
-            self.lbl_v_drop.setStyleSheet("font-size: 64px; color: #38bdf8;")
-        elif self.drop_mode == 2:
+        # 3. РАЗДЕЛЬНАЯ КАПЛЯ
+        # А. Центральная капля (независимый чекбокс)
+        if self.drop_center_on:
             pairs.append(SEGS['drop_center'])
-            self.lbl_v_drop.setText("•")
-            self.lbl_v_drop.setStyleSheet("font-size: 64px; color: #0284c7;")
-        elif self.drop_mode == 3:
-            # Бегущий ободок
-            rim = [SEGS['drop_top'], SEGS['drop_right'], SEGS['drop_bot'], SEGS['drop_left']]
-            pairs.append(SEGS['drop_center'])
-            pairs.append(rim[self.drop_anim_frame])
+
+        # Б. Обводка (ободок) капли (независимый радиобаттон)
+        rim_quads = [SEGS['drop_top'], SEGS['drop_right'], SEGS['drop_bot'], SEGS['drop_left']]
+        if self.drop_rim_mode == 1:
+            # Горит вся обводка статично (все 4 сегмента)
+            pairs.extend(rim_quads)
+        elif self.drop_rim_mode == 2:
+            # Бегущий огонёк только по обводке
+            pairs.append(rim_quads[self.drop_anim_frame])
+
+        # Визуализация капли в GUI
+        if self.drop_center_on and self.drop_rim_mode == 1:
+            self.lbl_v_drop_rim.setText("💧")
+            self.lbl_v_drop_rim.setStyleSheet("font-size: 60px; color: #38bdf8;")
+            self.lbl_v_drop_info.setText("Капля + Полный ободок")
+        elif self.drop_center_on and self.drop_rim_mode == 0:
+            self.lbl_v_drop_rim.setText("•")
+            self.lbl_v_drop_rim.setStyleSheet("font-size: 60px; color: #0284c7;")
+            self.lbl_v_drop_info.setText("Только центральная капля")
+        elif not self.drop_center_on and self.drop_rim_mode == 1:
+            self.lbl_v_drop_rim.setText("◯")
+            self.lbl_v_drop_rim.setStyleSheet("font-size: 60px; color: #38bdf8;")
+            self.lbl_v_drop_info.setText("Только ободок (без центра)")
+        elif self.drop_rim_mode == 2:
             anim_chars = ["▲", "▶", "▼", "◀"]
-            self.lbl_v_drop.setText(anim_chars[self.drop_anim_frame])
-            self.lbl_v_drop.setStyleSheet("font-size: 64px; color: #38bdf8;")
+            self.lbl_v_drop_rim.setText(anim_chars[self.drop_anim_frame])
+            self.lbl_v_drop_rim.setStyleSheet("font-size: 60px; color: #38bdf8;")
+            self.lbl_v_drop_info.setText(f"Вращение ободка ({'с центром' if self.drop_center_on else 'без центра'})")
         else:
-            self.lbl_v_drop.setText("○")
-            self.lbl_v_drop.setStyleSheet("font-size: 64px; color: #1e293b;")
+            self.lbl_v_drop_rim.setText("·")
+            self.lbl_v_drop_rim.setStyleSheet("font-size: 60px; color: #1e293b;")
+            self.lbl_v_drop_info.setText("Капля выключена")
 
         # 4. Молния
         ln_active = False
