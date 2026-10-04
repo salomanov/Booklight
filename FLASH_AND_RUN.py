@@ -17,7 +17,7 @@ except Exception:
     def beep(freq=1500, dur=250):
         print('\a', end='', flush=True)
 
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 BIN_PATH = os.path.join(ROOT_DIR, "custom_firmware", "build", "scanner.bin")
 
 def main():
@@ -27,6 +27,7 @@ def main():
 
     if not os.path.exists(BIN_PATH):
         print(f"[X] Файл не найден: {BIN_PATH}")
+        input("Нажмите Enter...")
         return False
 
     with open(BIN_PATH, "rb") as f:
@@ -35,6 +36,7 @@ def main():
     total_bytes = len(bin_data)
     print(f"[*] Прошивка: {BIN_PATH} ({total_bytes} байт)")
 
+    # Pad data to multiple of 128 bytes (page size)
     page_size = 128
     pad_len = (page_size - (total_bytes % page_size)) % page_size
     padded_data = bin_data + (b'\xFF' * pad_len)
@@ -51,12 +53,19 @@ def main():
         else:
             j.open()
         j.set_tif(pylink.enums.JLinkInterfaces.SWD)
-        j.set_speed(500)
+        j.set_speed(500) # Safe 500 kHz for clone jumper wires
     except Exception as e:
         print(f"[X] Ошибка открытия J-Link: {e}")
+        input("Нажмите Enter...")
         return False
 
     print(f"[*] J-Link подключен (SN: {j.serial_number})")
+
+    if "--check" in sys.argv:
+        print("[✓] ПРОВЕРКА ЗАПУСКА: Все модули, прошивка и программатор J-Link готовы к работе!")
+        j.close()
+        return True
+
     print("\n" + "=" * 65)
     print(" >>> ОЖИДАЮ ЧИП (КАСАНИЕ NRST К GND ИЛИ 3.3V) <<<")
     print(" Коснитесь пина 'R' (NRST) на землю 'G' (GND) ОДИН РАЗ И ОТПУСТИТЕ!")
@@ -78,12 +87,15 @@ def main():
             j.coresight_configure()
             dpidr = j.coresight_read(0, ap=False)
             if dpidr in (0x0BC11477, 0x0BB11477, 0x2BA01477):
+                # 1. DP Power-up
                 j.coresight_write(1, 0x50000000, ap=False)
                 j.coresight_write(0, 0x1E, ap=False)
+
+                # 2. Halt Core in Reset Vector
                 j.coresight_write(2, 0x00000000, ap=False)
-                j.coresight_write(0, 0x23000002, ap=True)
-                j.coresight_write(1, 0xE000EDF0, ap=True)
-                j.coresight_write(3, 0xA05F0003, ap=True)
+                j.coresight_write(0, 0x23000002, ap=True) # CSW
+                j.coresight_write(1, 0xE000EDF0, ap=True) # DHCSR
+                j.coresight_write(3, 0xA05F0003, ap=True) # HALT | DEBUGEN
 
                 caught = True
                 beep(1800, 200)
@@ -101,41 +113,50 @@ def main():
 
     time.sleep(0.1)
 
-    # PHASE 2: Flash Erase & Programming
+    # PHASE 2: Flash Erase & Programming (Isolated outside capture loop)
     try:
+        # Give user time to release wire/tweezer and settle bus
         time.sleep(0.4)
-        j.coresight_write(0, 0x1E, ap=False)
-        j.coresight_write(2, 0x00000000, ap=False)
-        j.coresight_write(0, 0x23000002, ap=True)
 
+        # Clear aborts
+        j.coresight_write(0, 0x1E, ap=False)
+        j.coresight_write(2, 0x00000000, ap=False) # AP 0 Bank 0
+        j.coresight_write(0, 0x23000002, ap=True)  # CSW 32-bit non-increment
+
+        # 3. Enable FLASH & SRAM clock in RCC->AHBENR (0x40021014)
         j.coresight_write(1, 0x40021014, ap=True)
         j.coresight_write(3, 0x00000104, ap=True)
 
+        # 4. KEYR unlock
         j.coresight_write(1, 0x40022008, ap=True)
         j.coresight_write(3, 0x45670123, ap=True)
         j.coresight_write(1, 0x40022008, ap=True)
         j.coresight_write(3, 0xCDEF89AB, ap=True)
 
+        # 5. Mass Erase
         print("[*] Выполняю Mass Erase Flash памяти...")
-        j.coresight_write(1, 0x40022014, ap=True)
-        j.coresight_write(3, 0x00000004, ap=True)
+        j.coresight_write(1, 0x40022014, ap=True) # FLASH->CR
+        j.coresight_write(3, 0x00000004, ap=True) # MER bit
         j.coresight_write(1, 0x08000000, ap=True)
-        j.coresight_write(3, 0x12344321, ap=True)
-        
+        j.coresight_write(3, 0x12344321, ap=True) # Dummy write to start erase
+
+        # Wait for Mass Erase completion via BSY flag in FLASH->SR (0x40022010)
         time.sleep(0.05)
         for _ in range(100):
             j.coresight_write(1, 0x40022010, ap=True)
             sr = j.coresight_read(3, ap=True)
-            if not (sr & 0x00010000):
+            if not (sr & 0x00010000): # BSY == 0
                 break
             time.sleep(0.005)
 
+        # Clear MER bit in FLASH->CR
         j.coresight_write(1, 0x40022014, ap=True)
         j.coresight_write(3, 0x00000000, ap=True)
-        j.coresight_write(0, 0x1E, ap=False)
+        j.coresight_write(0, 0x1E, ap=False) # Clear any aborts
 
         print(f"[*] Программирую {num_pages} страниц ({total_bytes} байт)...")
 
+        # Unlock KEYR again for programming
         j.coresight_write(1, 0x40022008, ap=True)
         j.coresight_write(3, 0x45670123, ap=True)
         j.coresight_write(1, 0x40022008, ap=True)
@@ -148,22 +169,27 @@ def main():
             words = struct.unpack('<32I', page_bytes)
             cur_addr = flash_addr + page_idx * page_size
 
+            # Set PG bit with non-increment CSW
             j.coresight_write(0, 0x23000002, ap=True)
             j.coresight_write(1, 0x40022014, ap=True)
             j.coresight_write(3, 0x00000001, ap=True)
 
+            # Auto-increment CSW for words 0..30
             j.coresight_write(0, 0x23000012, ap=True)
             j.coresight_write(1, cur_addr, ap=True)
             for i in range(31):
                 j.coresight_write(3, words[i], ap=True)
 
+            # Non-increment CSW for PGSTRT | PG (0x00080001)
             j.coresight_write(0, 0x23000002, ap=True)
             j.coresight_write(1, 0x40022014, ap=True)
             j.coresight_write(3, 0x00080001, ap=True)
 
+            # Write word 31
             j.coresight_write(1, cur_addr + 31 * 4, ap=True)
             j.coresight_write(3, words[31], ap=True)
 
+            # Wait for BSY to clear
             time.sleep(0.003)
             for _ in range(50):
                 j.coresight_write(1, 0x40022010, ap=True)
@@ -172,6 +198,7 @@ def main():
                     break
                 time.sleep(0.001)
 
+            # Clear PG bit
             j.coresight_write(1, 0x40022014, ap=True)
             j.coresight_write(3, 0x00000000, ap=True)
 
@@ -181,22 +208,25 @@ def main():
 
         print("\n[✓] Запись завершена! Выполняю 100% верификацию...")
 
-        total_words = len(padded_data) // 4
-        all_expected = struct.unpack(f'<{total_words}I', padded_data)
-
-        j.coresight_write(0, 0x23000012, ap=True)
-        j.coresight_write(1, flash_addr, ap=True)
-        _ = j.coresight_read(3, ap=True)
+        # Per-page auto-increment verification (safe against 1KB boundary wrap-around)
+        j.coresight_write(0, 0x23000012, ap=True) # Auto-increment CSW
 
         verified = True
-        for w_idx in range(total_words):
-            read_w = j.coresight_read(3, ap=True)
-            if read_w != all_expected[w_idx]:
-                addr = flash_addr + w_idx * 4
-                print(f"\n[X] Ошибка верификации по адресу 0x{addr:08X}: записано 0x{all_expected[w_idx]:08X}, прочитано 0x{read_w:08X}")
-                verified = False
+        for p in range(num_pages):
+            cur_addr = flash_addr + p * page_size
+            j.coresight_write(1, cur_addr, ap=True)
+            exp_words = struct.unpack('<32I', padded_data[p * page_size : (p + 1) * page_size])
+            for i in range(32):
+                read_w = j.coresight_read(3, ap=True)
+                if read_w != exp_words[i]:
+                    addr = cur_addr + i * 4
+                    print(f"\n[X] Ошибка верификации по адресу 0x{addr:08X}: записано 0x{exp_words[i]:08X}, прочитано 0x{read_w:08X}")
+                    verified = False
+                    break
+            if not verified:
                 break
 
+        # Restore non-increment CSW
         j.coresight_write(0, 0x23000002, ap=True)
 
         if not verified:
@@ -207,14 +237,16 @@ def main():
         print(f"[✓] ВЕРИФИКАЦИЯ 100% УСПЕШНА! Все {total_bytes} байт проверены!")
         beep(2000, 300)
 
+        # Reset core to run firmware with permanent debug enabled
         print("[*] Перезапускаю процессор в рабочий режим с ПОСТОЯННОЙ ОТЛАДКОЙ...")
         j.coresight_write(0, 0x23000002, ap=True)
         j.coresight_write(1, 0xE000EDF0, ap=True)
-        j.coresight_write(3, 0xA05F0001, ap=True)
+        j.coresight_write(3, 0xA05F0001, ap=True) # C_DEBUGEN only (run core)
         j.coresight_write(1, 0xE000ED0C, ap=True)
-        j.coresight_write(3, 0x05FA0004, ap=True)
+        j.coresight_write(3, 0x05FA0004, ap=True) # AIRCR SYSRESETREQ
         time.sleep(0.3)
 
+        # Check SRAM for SCAN magic
         try:
             j.coresight_write(1, 0x20000004, ap=True)
             magic = j.coresight_read(3, ap=True)

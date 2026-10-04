@@ -114,34 +114,6 @@ static void all_pins_high_z(void) {
     }
 }
 
-static void set_pair(int high_idx, int low_idx) {
-    all_pins_high_z();
-
-    if (high_idx == low_idx || high_idx < 0 || high_idx >= NUM_PINS || low_idx < 0 || low_idx >= NUM_PINS) {
-        return;
-    }
-
-    /* Voltage safety check */
-    if (g_scanner.vdd_mv > 0 && g_scanner.vdd_mv < 2800) {
-        return; // Low voltage protection
-    }
-
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-    GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
-    GPIO_InitStruct.Pull  = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW; // Low slew rate = no spikes
-
-    /* Set Low pin first */
-    HAL_GPIO_WritePin(PINS[low_idx].port, PINS[low_idx].pin, GPIO_PIN_RESET);
-    GPIO_InitStruct.Pin = PINS[low_idx].pin;
-    HAL_GPIO_Init(PINS[low_idx].port, &GPIO_InitStruct);
-
-    /* Set High pin */
-    HAL_GPIO_WritePin(PINS[high_idx].port, PINS[high_idx].pin, GPIO_PIN_SET);
-    GPIO_InitStruct.Pin = PINS[high_idx].pin;
-    HAL_GPIO_Init(PINS[high_idx].port, &GPIO_InitStruct);
-}
-
 static void set_single_high(int high_idx) {
     all_pins_high_z();
     if (high_idx < 0 || high_idx >= NUM_PINS) return;
@@ -156,19 +128,82 @@ static void set_single_high(int high_idx) {
     HAL_GPIO_Init(PINS[high_idx].port, &GPIO_InitStruct);
 }
 
-/* Pair translation from step index (0 .. 155) */
+static void set_single_low(int low_idx) {
+    all_pins_high_z();
+    if (low_idx < 0 || low_idx >= NUM_PINS) return;
+
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Pull  = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+    GPIO_InitStruct.Pin   = PINS[low_idx].pin;
+
+    HAL_GPIO_WritePin(PINS[low_idx].port, PINS[low_idx].pin, GPIO_PIN_RESET);
+    HAL_GPIO_Init(PINS[low_idx].port, &GPIO_InitStruct);
+}
+
+static void set_pair(int high_idx, int low_idx) {
+    all_pins_high_z();
+
+    /* 9 = VDD or GND marker */
+    if (high_idx == 9 && low_idx >= 0 && low_idx < NUM_PINS) {
+        set_single_low(low_idx); // VDD -> Pin LOW
+        return;
+    }
+    if (low_idx == 9 && high_idx >= 0 && high_idx < NUM_PINS) {
+        set_single_high(high_idx); // Pin HIGH -> GND
+        return;
+    }
+
+    if (high_idx == low_idx || high_idx < 0 || high_idx >= NUM_PINS || low_idx < 0 || low_idx >= NUM_PINS) {
+        return;
+    }
+
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Pull  = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH; // Full brightness drive
+
+    /* Set Low pin first */
+    HAL_GPIO_WritePin(PINS[low_idx].port, PINS[low_idx].pin, GPIO_PIN_RESET);
+    GPIO_InitStruct.Pin = PINS[low_idx].pin;
+    HAL_GPIO_Init(PINS[low_idx].port, &GPIO_InitStruct);
+
+    /* Set High pin */
+    HAL_GPIO_WritePin(PINS[high_idx].port, PINS[high_idx].pin, GPIO_PIN_SET);
+    GPIO_InitStruct.Pin = PINS[high_idx].pin;
+    HAL_GPIO_Init(PINS[high_idx].port, &GPIO_InitStruct);
+}
+
+/* Pair translation from step index (0 .. 89)
+ * 0..71: All 72 pairs between the 9 pins
+ * 72..80: Pin HIGH -> GND (9 steps)
+ * 81..89: VDD -> Pin LOW (9 steps)
+ */
+#define TOTAL_STEPS 90
+
 static void get_pair_for_step(int step, int *high_idx, int *low_idx) {
-    int cur = 0;
-    for (int h = 0; h < NUM_PINS; h++) {
-        for (int l = 0; l < NUM_PINS; l++) {
-            if (h == l) continue;
-            if (cur == step) {
-                *high_idx = h;
-                *low_idx  = l;
-                return;
+    if (step < 72) {
+        int cur = 0;
+        for (int h = 0; h < NUM_PINS; h++) {
+            for (int l = 0; l < NUM_PINS; l++) {
+                if (h == l) continue;
+                if (cur == step) {
+                    *high_idx = h;
+                    *low_idx  = l;
+                    return;
+                }
+                cur++;
             }
-            cur++;
         }
+    } else if (step < 81) {
+        *high_idx = step - 72;
+        *low_idx  = 9; // GND
+        return;
+    } else if (step < 90) {
+        *high_idx = 9; // VDD
+        *low_idx  = step - 81;
+        return;
     }
     *high_idx = 0;
     *low_idx = 1;
@@ -217,7 +252,7 @@ int main(void) {
     g_scanner.magic       = SCANNER_MAGIC;
     g_scanner.mode        = 0;
     g_scanner.step_idx    = 0;
-    g_scanner.total_steps = NUM_PINS * (NUM_PINS - 1); // 156
+    g_scanner.total_steps = TOTAL_STEPS;
     g_scanner.high_pin_idx= 0;
     g_scanner.low_pin_idx = 1;
     g_scanner.delay_ms    = 1000;
@@ -228,14 +263,15 @@ int main(void) {
     g_scanner.cmd_set_low = 1;
     g_scanner.heartbeat   = 0;
 
-    /* 2. Enable DBGMCU peripheral clock and keep SWD debug port active in STOP mode */
+    /* 2. Permanent 24/7 SWD debug mode: DBGMCU always ON, timers/watchdogs frozen on debug */
     RCC->APBENR1 |= RCC_APBENR1_DBGEN;
     DBGMCU->CR |= DBGMCU_CR_DBG_STOP;
+    DBGMCU->APBFZ1 |= 0xFFFFFFFF;
 
-    /* 2. Enable Clocks: GPIOA, GPIOB */
+    /* 3. Enable Clocks: GPIOA, GPIOB */
     RCC->IOPENR |= RCC_IOPENR_GPIOAEN | RCC_IOPENR_GPIOBEN;
 
-    /* 3. SysTick 1 ms */
+    /* 4. SysTick 1 ms */
     SysTick_Config(SystemCoreClock / 1000U);
 
     /* Enable GPIO Port clocks */
@@ -256,7 +292,7 @@ int main(void) {
     all_pins_high_z();
     adc_init();
 
-    g_scanner.total_steps = NUM_PINS * (NUM_PINS - 1); // 72 steps
+    g_scanner.total_steps = TOTAL_STEPS;
     int init_h = 0, init_l = 1;
     get_pair_for_step(0, &init_h, &init_l);
     g_scanner.high_pin_idx = init_h;

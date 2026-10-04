@@ -38,11 +38,10 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QColor
-from pyocd.core.helpers import ConnectHelper
+import pylink
 
 # Shared memory in SRAM
 SCANNER_ADDR = 0x20000004
-TARGET = 'py32f002bx5'
 
 PIN_NAMES = [
     "PA0", "PA1", "PA3", "PB0", "PB1", "PB2", "PB3", "PB4", "PB5"
@@ -66,83 +65,105 @@ class SwdWorker(QThread):
         self.running = False
         self.wait(1000)
 
-        self.scanner_base = None
-
     def run(self):
-        connected = False
-        session = None
-        target = None
+        j = None
+        base = SCANNER_ADDR
         fail_count = 0
 
         while self.running:
-            try:
-                if session is None:
-                    session = ConnectHelper.session_with_chosen_probe(
-                        target_override=TARGET,
-                        connect_mode='attach',
-                        options={'auto_unlock': False, 'frequency': 500000}
-                    )
-                    session.open()
-                    target = session.target
-                    if target.selected_core is None and target.cores:
-                        target.selected_core = list(target.cores.values())[0]
-                    self.scanner_base = None
-                    connected = True
+            if j is None:
+                try:
+                    j = pylink.JLink()
+                    if j.num_connected_emulators() > 0:
+                        try:
+                            j.open('774496021')
+                        except Exception:
+                            j.open()
+                    else:
+                        j.open()
+                    j.set_tif(pylink.enums.JLinkInterfaces.SWD)
+                    j.set_speed(1000)
+                    j.coresight_configure()
+                    j.coresight_write(0, 0x1E, ap=False) # Clear aborts
+                    j.coresight_write(1, 0x50000000, ap=False) # Power-up DP
+                    j.coresight_write(2, 0x00000000, ap=False) # Select AP 0 Bank 0
+                    j.coresight_write(0, 0x23000002, ap=True)  # CSW 32-bit transfer
                     fail_count = 0
-                    self.connection_changed.emit(True, f"Подключено: {session.probe.description} (500 кГц)")
+                    self.connection_changed.emit(True, f"Подключено: J-Link {j.serial_number} (1000 кГц, прямой SWD)")
+                except Exception as e:
+                    if j:
+                        try:
+                            j.close()
+                        except Exception:
+                            pass
+                        j = None
+                    self.connection_changed.emit(False, f"Поиск чипа... ({e})")
+                    self.msleep(1000)
+                    continue
 
-                # Auto-detect scanner memory base
-                if self.scanner_base is None:
-                    try:
-                        probe = target.read_memory_block32(0x20000000, 32)
-                        for i, val in enumerate(probe):
-                            if val == 0x5343414E:
-                                self.scanner_base = 0x20000000 + i * 4
-                                break
-                    except Exception:
-                        pass
-
-                base = self.scanner_base if self.scanner_base is not None else SCANNER_ADDR
-
-                # Process commands from GUI safely
+            # Connected - process commands & read telemetry
+            try:
+                # Process pending commands from GUI
                 while not self.command_queue.empty():
                     cmd, val = self.command_queue.get_nowait()
                     try:
+                        j.coresight_write(0, 0x1E, ap=False) # Clear abort
                         if cmd == 'PAUSE':
-                            target.write32(base + 0x1C, int(val))
+                            j.coresight_write(1, base + 0x1C, ap=True)
+                            j.coresight_write(3, int(val), ap=True)
                         elif cmd == 'MODE':
-                            target.write32(base + 0x04, int(val))
+                            j.coresight_write(1, base + 0x04, ap=True)
+                            j.coresight_write(3, int(val), ap=True)
                         elif cmd == 'DELAY':
-                            target.write32(base + 0x18, int(val))
+                            j.coresight_write(1, base + 0x18, ap=True)
+                            j.coresight_write(3, int(val), ap=True)
                         elif cmd == 'NEXT':
-                            target.write32(base + 0x30, 1)
+                            j.coresight_write(1, base + 0x30, ap=True)
+                            j.coresight_write(3, 1, ap=True)
                         elif cmd == 'PREV':
-                            target.write32(base + 0x34, 1)
+                            j.coresight_write(1, base + 0x34, ap=True)
+                            j.coresight_write(3, 1, ap=True)
                         elif cmd == 'SET_HIGH':
-                            target.write32(base + 0x38, int(val))
+                            j.coresight_write(1, base + 0x38, ap=True)
+                            j.coresight_write(3, int(val), ap=True)
                         elif cmd == 'SET_LOW':
-                            target.write32(base + 0x3C, int(val))
+                            j.coresight_write(1, base + 0x3C, ap=True)
+                            j.coresight_write(3, int(val), ap=True)
                         elif cmd == 'SET_STEP':
-                            target.write32(base + 0x08, int(val))
-                            target.write32(base + 0x30, 1) # trigger refresh
+                            j.coresight_write(1, base + 0x08, ap=True)
+                            j.coresight_write(3, int(val), ap=True)
+                            j.coresight_write(1, base + 0x30, ap=True)
+                            j.coresight_write(3, 1, ap=True)
                     except Exception as cmd_err:
                         print(f"[SWD Command Warning] {cmd}: {cmd_err}")
 
-                # Read telemetry
-                magic = target.read32(base + 0x00)
+                # Read telemetry words (17 words from base: 0x00 to 0x40)
+                j.coresight_write(0, 0x1E, ap=False) # Clear abort
+                j.coresight_write(0, 0x23000012, ap=True) # Auto-increment CSW
+                j.coresight_write(1, base, ap=True) # TAR = base
+                
+                words = []
+                for _ in range(17):
+                    words.append(j.coresight_read(3, ap=True))
+                
+                # Restore non-increment CSW
+                j.coresight_write(0, 0x23000002, ap=True)
+
+                magic = words[0]
                 if magic == 0x5343414E: # 'SCAN'
-                    mode    = target.read32(base + 0x04)
-                    step    = target.read32(base + 0x08)
-                    total   = target.read32(base + 0x0C)
-                    h_idx   = target.read32(base + 0x10)
-                    l_idx   = target.read32(base + 0x14)
-                    delay   = target.read32(base + 0x18)
-                    paused  = target.read32(base + 0x1C)
-                    idr_a   = target.read32(base + 0x20)
-                    idr_b   = target.read32(base + 0x24)
-                    vdd_mv  = target.read32(base + 0x28)
-                    raw_adc = target.read32(base + 0x2C)
-                    hb      = target.read32(base + 0x40)
+                    mode    = words[1]
+                    step    = words[2]
+                    total   = words[3]
+                    h_idx   = words[4]
+                    l_idx   = words[5]
+                    delay   = words[6]
+                    paused  = words[7]
+                    idr_a   = words[8]
+                    idr_b   = words[9]
+                    vdd_mv  = words[10]
+                    raw_adc = words[11]
+                    # words[12..15] are commands/manual
+                    hb      = words[16]
 
                     h_name = PIN_NAMES[h_idx] if h_idx < len(PIN_NAMES) else f"P{h_idx}"
                     l_name = PIN_NAMES[l_idx] if l_idx < len(PIN_NAMES) else f"P{l_idx}"
@@ -165,25 +186,29 @@ class SwdWorker(QThread):
                         'hb': hb
                     })
 
-                fail_count = 0 # Reset error count on successful read
+                fail_count = 0
                 self.msleep(60)
 
             except Exception as e:
                 fail_count += 1
-                if fail_count >= 3:
-                    print(f"[SWD Worker Error] {e}")
-                    self.connection_changed.emit(False, f"Ошибка: {e}")
-                    if session:
+                if fail_count >= 4:
+                    if j:
                         try:
-                            session.close()
+                            j.close()
                         except Exception:
                             pass
-                        session = None
-                        target = None
-                    self.scanner_base = None
-                    self.msleep(800)
+                        j = None
+                    self.connection_changed.emit(False, f"Связь прервана: {e}")
+                    self.msleep(1000)
                 else:
                     self.msleep(80)
+
+        if j:
+            try:
+                j.close()
+            except Exception:
+                pass
+
 
 class DM02iStudio(QMainWindow):
     def __init__(self):
