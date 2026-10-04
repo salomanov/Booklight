@@ -19,25 +19,18 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QColor
 
-# Базовый адрес в ОЗУ (автодетект)
 SCANNER_ADDR = 0x2000000C
-
-# Контакты 1..6 соответствуют индексам 0..5 в новой прошивке:
-# 0: PB0 (Контакт 1 / Нога 14)
-# 1: PB1 (Контакт 2 / Нога 13)
-# 2: PB2 (Контакт 3 / Нога 12)
-# 3: PB3 (Контакт 4 / Нога 11)
-# 4: PB5 (Контакт 5 / Нога 10)
-# 5: PC1 (Контакт 6 / Нога 9)
 
 def p_pair(plus_contact, minus_contact):
     """Преобразует номера контактов 1..6 в 16-битное число для прошивки: (high << 8) | low"""
     return ((plus_contact - 1) << 8) | (minus_contact - 1)
 
-# Полная база всех пар сегментов:
+# Полная база всех 30 пар сегментов:
 SEGS = {
-    # Капля (5 сегментов, общий катод на Контакте 6)
+    # Капля (центр)
     'drop_center': p_pair(1, 6),
+
+    # Обводка (ободок) капли (4 сегмента)
     'drop_top':    p_pair(2, 6),
     'drop_right':  p_pair(5, 6),
     'drop_bot':    p_pair(4, 6),
@@ -92,7 +85,7 @@ FONT_7SEG = {
 
 class SwdWorker(QThread):
     connection_status = pyqtSignal(bool, str)
-    telemetry_signal  = pyqtSignal(int, int) # vdd_mv, heartbeat
+    telemetry_signal  = pyqtSignal(int, int)
 
     def __init__(self):
         super().__init__()
@@ -101,10 +94,8 @@ class SwdWorker(QThread):
 
     def set_pairs(self, pairs_list):
         while not self.cmd_queue.empty():
-            try:
-                self.cmd_queue.get_nowait()
-            except Exception:
-                break
+            try: self.cmd_queue.get_nowait()
+            except Exception: break
         self.cmd_queue.put(pairs_list)
 
     def stop(self):
@@ -121,10 +112,8 @@ class SwdWorker(QThread):
             if j is None:
                 try:
                     j = pylink.JLink()
-                    try:
-                        j.open('774496021')
-                    except Exception:
-                        j.open()
+                    try: j.open('774496021')
+                    except Exception: j.open()
                     j.set_tif(pylink.enums.JLinkInterfaces.SWD)
                     j.set_speed(1000)
                     j.coresight_configure()
@@ -161,7 +150,6 @@ class SwdWorker(QThread):
                     count = len(target_pairs)
                     if count > 32: count = 32
 
-                    # Запись пар в ОЗУ
                     j.coresight_write(1, base + 0x44, ap=True)
                     j.coresight_write(3, count, ap=True)
 
@@ -169,15 +157,13 @@ class SwdWorker(QThread):
                         j.coresight_write(1, base + 0x48 + (i * 4), ap=True)
                         j.coresight_write(3, target_pairs[i], ap=True)
 
-                    # Режим 4: Мультиплексинг (или 3 = All Off если count == 0)
                     j.coresight_write(1, base + 0x04, ap=True)
                     j.coresight_write(3, 4 if count > 0 else 3, ap=True)
 
-                # Периодическое чтение телеметрии
-                j.coresight_write(1, base + 0x28, ap=True) # vdd_mv
+                j.coresight_write(1, base + 0x28, ap=True)
                 j.coresight_read(3, ap=True)
                 vdd = j.coresight_read(3, ap=True)
-                j.coresight_write(1, base + 0x40, ap=True) # heartbeat
+                j.coresight_write(1, base + 0x40, ap=True)
                 j.coresight_read(3, ap=True)
                 hb = j.coresight_read(3, ap=True)
                 self.telemetry_signal.emit(vdd, hb)
@@ -205,33 +191,36 @@ class DM02iController(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("DM02i Display Controller - Обучающая панель экрана вейпа")
-        self.resize(1120, 820)
+        self.resize(1120, 840)
 
         # Состояния элементов
         self.percent_val = 100
         self.percent_show = True
         self.liquid_bars = 3
         
-        # Капля: раздельные независимые элементы (Центр и Обводка)
-        self.drop_center_on = True
-        self.drop_rim_mode = 1 # 0=выкл, 1=горит статично, 2=вращение
-        self.drop_anim_frame = 0
+        # 1. КАПЛЯ (отдельно): 0=выкл, 1=горит, 2=моргает
+        self.drop_mode = 1
+        self.drop_blink_state = True
 
-        # Режимы молнии: 0=выкл, 1=вкл, 2=моргание
+        # 2. ОБВОДКА КАПЛИ (отдельно): 0=выкл, 1=горит весь круг, 2=бегущий огонек
+        self.rim_mode = 1
+        self.rim_anim_frame = 0
+
+        # 3. МОЛНИЯ: 0=выкл, 1=горит, 2=моргает
         self.lightning_mode = 1
         self.lightning_state = True
 
-        # Режимы BOOST: 0=выкл, 1=вкл (все 4), 2=моргание, 3=турбо вращение
+        # 4. BOOST: 0=выкл, 1=горит, 2=моргает, 3=турбо вращение
         self.boost_mode = 1
         self.boost_anim_frame = 0
         self.boost_blink_state = True
 
-        # Режим автодемо счетчика
+        # Автодемо счетчика
         self.demo_counter = False
 
         self.init_ui()
 
-        # Таймер анимаций (100 мс = 10 кадров/сек)
+        # Таймер анимаций (100 мс = 10 FPS)
         self.anim_timer = QTimer(self)
         self.anim_timer.timeout.connect(self.on_anim_tick)
         self.anim_timer.start(100)
@@ -242,7 +231,6 @@ class DM02iController(QMainWindow):
         self.worker.telemetry_signal.connect(self.on_telemetry)
         self.worker.start()
 
-        # Первичное обновление
         self.update_display()
 
     def closeEvent(self, event):
@@ -268,7 +256,7 @@ class DM02iController(QMainWindow):
         title_box = QVBoxLayout()
         h_title = QLabel("DM02i V03 — УМНЫЙ КОНТРОЛЛЕР ДИСПЛЕЯ")
         h_title.setStyleSheet("color: #a5b4fc; font-size: 18px; font-weight: bold; letter-spacing: 1px;")
-        h_sub = QLabel("Раздельное управление каплей, обводкой, индикаторами и ползунком процентов")
+        h_sub = QLabel("Полностью раздельное управление Каплей 💧, Обводкой ⭕, Индикаторами и Процентами")
         h_sub.setStyleSheet("color: #94a3b8; font-size: 12px;")
         title_box.addWidget(h_title)
         title_box.addWidget(h_sub)
@@ -296,7 +284,7 @@ class DM02iController(QMainWindow):
 
         # Рамка экрана
         self.screen_frame = QFrame()
-        self.screen_frame.setFixedSize(380, 560)
+        self.screen_frame.setFixedSize(380, 580)
         self.screen_frame.setStyleSheet("""
             background: #020617;
             border: 4px solid #334155;
@@ -310,15 +298,15 @@ class DM02iController(QMainWindow):
         top_screen = QHBoxLayout()
         top_screen.setSpacing(15)
 
-        # Капля (Визуализация)
+        # Капля + Ободок (Визуализация)
         drop_v_box = QVBoxLayout()
         drop_v_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_v_drop_rim = QLabel("◯")
-        self.lbl_v_drop_rim.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_v_drop_rim.setStyleSheet("font-size: 60px; color: #38bdf8; font-weight: bold;")
-        self.lbl_v_drop_info = QLabel("Капля: Центр + Ободок")
+        self.lbl_v_drop_graphic = QLabel("💧")
+        self.lbl_v_drop_graphic.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_v_drop_graphic.setStyleSheet("font-size: 56px; color: #38bdf8;")
+        self.lbl_v_drop_info = QLabel("Капля: Вкл | Ободок: Вкл")
         self.lbl_v_drop_info.setStyleSheet("color: #94a3b8; font-size: 11px;")
-        drop_v_box.addWidget(self.lbl_v_drop_rim)
+        drop_v_box.addWidget(self.lbl_v_drop_graphic)
         drop_v_box.addWidget(self.lbl_v_drop_info)
         top_screen.addLayout(drop_v_box)
 
@@ -378,13 +366,12 @@ class DM02iController(QMainWindow):
 
         # ГРУППА 1: Проценты (0..100)
         grp_percent = QGroupBox("🔢 Управление процентами и дисплеем (0 .. 100%)")
-        grp_percent.setStyleSheet("QGroupBox { font-weight: bold; color: #a5b4fc; border: 1px solid #475569; border-radius: 8px; margin-top: 6px; padding-top: 10px; }")
+        grp_percent.setStyleSheet("QGroupBox { font-weight: bold; color: #a5b4fc; border: 1px solid #475569; border-radius: 8px; margin-top: 6px; padding: 12px; }")
         p_layout = QVBoxLayout(grp_percent)
 
-        # Чекбокс включения дисплея цифр (чтобы при выключении не оставалось 0%)
         self.chk_percent_show = QCheckBox("Включить отображение цифр и знака %")
         self.chk_percent_show.setChecked(True)
-        self.chk_percent_show.setStyleSheet("font-size: 13px; font-weight: bold; color: #cbd5e1;")
+        self.chk_percent_show.setStyleSheet("font-size: 13px; font-weight: bold; color: #f8fafc;")
         self.chk_percent_show.toggled.connect(self.on_percent_show_toggled)
         p_layout.addWidget(self.chk_percent_show)
 
@@ -397,7 +384,7 @@ class DM02iController(QMainWindow):
         self.spin_pct = QSpinBox()
         self.spin_pct.setRange(0, 100)
         self.spin_pct.setValue(100)
-        self.spin_pct.setStyleSheet("font-size: 16px; font-weight: bold; width: 60px;")
+        self.spin_pct.setStyleSheet("font-size: 16px; font-weight: bold; width: 60px; color: #f8fafc; background: #1e293b;")
         self.spin_pct.valueChanged.connect(self.slider_pct.setValue)
         self.slider_pct.valueChanged.connect(self.spin_pct.setValue)
 
@@ -408,11 +395,12 @@ class DM02iController(QMainWindow):
         btn_p_box = QHBoxLayout()
         for v in [0, 25, 50, 75, 99, 100]:
             btn = QPushButton(f"{v}%")
-            btn.setStyleSheet("padding: 4px 8px; font-size: 11px;")
+            btn.setStyleSheet("padding: 4px 8px; font-size: 11px; background: #334155; color: #f8fafc;")
             btn.clicked.connect(lambda _, val=v: self.set_percent_and_enable(val))
             btn_p_box.addWidget(btn)
 
         self.btn_demo_pct = QPushButton("🔄 Автосчётчик")
+        self.btn_demo_pct.setStyleSheet("background: #1e293b; color: #f8fafc; padding: 4px 8px;")
         self.btn_demo_pct.setCheckable(True)
         self.btn_demo_pct.clicked.connect(self.toggle_demo_pct)
         btn_p_box.addWidget(self.btn_demo_pct)
@@ -420,119 +408,142 @@ class DM02iController(QMainWindow):
 
         right_box.addWidget(grp_percent)
 
-        # ГРУППА 2: Деления жидкости и РАЗДЕЛЬНАЯ КАПЛЯ
-        grp_liquid = QGroupBox("💧 Жидкость: Полоски (0..3) и Раздельная Капля")
-        grp_liquid.setStyleSheet("QGroupBox { font-weight: bold; color: #38bdf8; border: 1px solid #475569; border-radius: 8px; margin-top: 6px; padding-top: 10px; }")
+        # ГРУППА 2: Деления жидкости, Капля и Обводка (ПОЛНОСТЬЮ РАЗДЕЛЬНЫЕ)
+        grp_liquid = QGroupBox("💧 Жидкость: Деления (0..3), Капля и Обводка")
+        grp_liquid.setStyleSheet("QGroupBox { font-weight: bold; color: #38bdf8; border: 1px solid #475569; border-radius: 8px; margin-top: 6px; padding: 12px; }")
         l_layout = QVBoxLayout(grp_liquid)
+        l_layout.setSpacing(10)
 
-        # Полоски
+        # 1. Полоски жидкости
         bar_row = QHBoxLayout()
-        bar_row.addWidget(QLabel("Деления жидкости (0..3):"))
+        lbl_bars = QLabel("Деления жидкости (0..3):")
+        lbl_bars.setStyleSheet("color: #f8fafc; font-weight: bold;")
+        bar_row.addWidget(lbl_bars)
         self.slider_bars = QSlider(Qt.Orientation.Horizontal)
         self.slider_bars.setRange(0, 3)
         self.slider_bars.setValue(3)
         self.slider_bars.valueChanged.connect(self.on_slider_bars_changed)
         self.lbl_bars_txt = QLabel("3 полоски")
-        self.lbl_bars_txt.setStyleSheet("font-weight: bold; width: 80px;")
+        self.lbl_bars_txt.setStyleSheet("font-weight: bold; width: 80px; color: #38bdf8;")
         bar_row.addWidget(self.slider_bars)
         bar_row.addWidget(self.lbl_bars_txt)
         l_layout.addLayout(bar_row)
 
-        # РАЗДЕЛЬНОЕ УПРАВЛЕНИЕ КАПЛЕЙ:
-        drop_sep_frame = QFrame()
-        drop_sep_frame.setStyleSheet("background: #0f172a; border-radius: 6px; padding: 6px;")
-        ds_layout = QVBoxLayout(drop_sep_frame)
+        # 2. КАПЛЯ 💧 (ОТДЕЛЬНОЕ УПРАВЛЕНИЕ)
+        drop_ctrl_row = QHBoxLayout()
+        lbl_d = QLabel("Капля 💧:")
+        lbl_d.setStyleSheet("color: #38bdf8; font-weight: bold; font-size: 13px; min-width: 90px;")
+        drop_ctrl_row.addWidget(lbl_d)
 
-        # 1. Чекбокс центральной капли
-        self.chk_drop_center = QCheckBox("💧 Центральная капля (точечный центр)")
-        self.chk_drop_center.setChecked(True)
-        self.chk_drop_center.setStyleSheet("font-size: 13px; font-weight: bold; color: #38bdf8;")
-        self.chk_drop_center.toggled.connect(self.on_drop_center_toggled)
-        ds_layout.addWidget(self.chk_drop_center)
+        self.bg_drop = QButtonGroup(self)
+        r_drop_off   = QRadioButton("Выкл")
+        r_drop_on    = QRadioButton("Горит")
+        r_drop_blink = QRadioButton("💧 Моргание")
+        for r in [r_drop_off, r_drop_on, r_drop_blink]:
+            r.setStyleSheet("color: #f8fafc; font-size: 12px;")
+            drop_ctrl_row.addWidget(r)
 
-        # 2. Обводка (ободок) капли: переключатель
-        rim_row = QHBoxLayout()
-        rim_row.addWidget(QLabel("Ободок капли:"))
-        self.bg_drop_rim = QButtonGroup(self)
+        self.bg_drop.addButton(r_drop_off, 0)
+        self.bg_drop.addButton(r_drop_on, 1)
+        self.bg_drop.addButton(r_drop_blink, 2)
+        r_drop_on.setChecked(True)
+        self.bg_drop.idToggled.connect(self.on_drop_mode_changed)
+        l_layout.addLayout(drop_ctrl_row)
+
+        # 3. ОБВОДКА (ОБОДОК) КАПЛИ ⭕ (ОТДЕЛЬНОЕ УПРАВЛЕНИЕ)
+        rim_ctrl_row = QHBoxLayout()
+        lbl_r = QLabel("Обводка ⭕:")
+        lbl_r.setStyleSheet("color: #0284c7; font-weight: bold; font-size: 13px; min-width: 90px;")
+        rim_ctrl_row.addWidget(lbl_r)
+
+        self.bg_rim = QButtonGroup(self)
         r_rim_off  = QRadioButton("Выкл")
-        r_rim_on   = QRadioButton("Горит статично (все 4)")
-        r_rim_spin = QRadioButton("🌀 Бегущий огонёк по кругу")
-        
-        self.bg_drop_rim.addButton(r_rim_off, 0)
-        self.bg_drop_rim.addButton(r_rim_on, 1)
-        self.bg_drop_rim.addButton(r_rim_spin, 2)
-        r_rim_on.setChecked(True)
-        self.bg_drop_rim.idToggled.connect(self.on_drop_rim_mode_changed)
-
+        r_rim_on   = QRadioButton("Горит (весь круг)")
+        r_rim_spin = QRadioButton("🌀 Бегущий огонёк")
         for r in [r_rim_off, r_rim_on, r_rim_spin]:
-            rim_row.addWidget(r)
-        ds_layout.addLayout(rim_row)
+            r.setStyleSheet("color: #f8fafc; font-size: 12px;")
+            rim_ctrl_row.addWidget(r)
 
-        l_layout.addWidget(drop_sep_frame)
+        self.bg_rim.addButton(r_rim_off, 0)
+        self.bg_rim.addButton(r_rim_on, 1)
+        self.bg_rim.addButton(r_rim_spin, 2)
+        r_rim_on.setChecked(True)
+        self.bg_rim.idToggled.connect(self.on_rim_mode_changed)
+        l_layout.addLayout(rim_ctrl_row)
+
         right_box.addWidget(grp_liquid)
 
         # ГРУППА 3: Молния ⚡ и Индикатор BOOST 🚀
         grp_extra = QGroupBox("⚡ Молния (Зарядка) и 🚀 BOOST")
-        grp_extra.setStyleSheet("QGroupBox { font-weight: bold; color: #facc15; border: 1px solid #475569; border-radius: 8px; margin-top: 6px; padding-top: 10px; }")
+        grp_extra.setStyleSheet("QGroupBox { font-weight: bold; color: #facc15; border: 1px solid #475569; border-radius: 8px; margin-top: 6px; padding: 12px; }")
         e_layout = QVBoxLayout(grp_extra)
+        e_layout.setSpacing(10)
 
         # Молния
         ln_row = QHBoxLayout()
-        ln_row.addWidget(QLabel("Молния ⚡:"))
+        lbl_ln = QLabel("Молния ⚡:")
+        lbl_ln.setStyleSheet("color: #facc15; font-weight: bold; font-size: 13px; min-width: 90px;")
+        ln_row.addWidget(lbl_ln)
+
         self.bg_ln = QButtonGroup(self)
         r_ln_off   = QRadioButton("Выкл")
         r_ln_on    = QRadioButton("Горит")
         r_ln_blink = QRadioButton("⚡ Моргание (1 Гц)")
+        for r in [r_ln_off, r_ln_on, r_ln_blink]:
+            r.setStyleSheet("color: #f8fafc; font-size: 12px;")
+            ln_row.addWidget(r)
+
         self.bg_ln.addButton(r_ln_off, 0)
         self.bg_ln.addButton(r_ln_on, 1)
         self.bg_ln.addButton(r_ln_blink, 2)
         r_ln_on.setChecked(True)
         self.bg_ln.idToggled.connect(self.on_lightning_mode_changed)
-
-        for r in [r_ln_off, r_ln_on, r_ln_blink]:
-            ln_row.addWidget(r)
         e_layout.addLayout(ln_row)
 
         # BOOST
         b_row = QHBoxLayout()
-        b_row.addWidget(QLabel("BOOST 🚀:"))
+        lbl_b = QLabel("BOOST 🚀:")
+        lbl_b.setStyleSheet("color: #ef4444; font-weight: bold; font-size: 13px; min-width: 90px;")
+        b_row.addWidget(lbl_b)
+
         self.bg_boost = QButtonGroup(self)
         r_b_off   = QRadioButton("Выкл")
         r_b_on    = QRadioButton("Горит")
         r_b_blink = QRadioButton("Моргание")
         r_b_spin  = QRadioButton("🚀 Турбо-раскрутка")
+        for r in [r_b_off, r_b_on, r_b_blink, r_b_spin]:
+            r.setStyleSheet("color: #f8fafc; font-size: 12px;")
+            b_row.addWidget(r)
+
         self.bg_boost.addButton(r_b_off, 0)
         self.bg_boost.addButton(r_b_on, 1)
         self.bg_boost.addButton(r_b_blink, 2)
         self.bg_boost.addButton(r_b_spin, 3)
         r_b_on.setChecked(True)
         self.bg_boost.idToggled.connect(self.on_boost_mode_changed)
-
-        for r in [r_b_off, r_b_on, r_b_blink, r_b_spin]:
-            b_row.addWidget(r)
         e_layout.addLayout(b_row)
 
         right_box.addWidget(grp_extra)
 
         # ГРУППА 4: Готовые сценарии вейпа в 1 клик
         grp_scen = QGroupBox("🎬 Готовые сценарии вейпа (В 1 клик)")
-        grp_scen.setStyleSheet("QGroupBox { font-weight: bold; color: #10b981; border: 1px solid #475569; border-radius: 8px; margin-top: 6px; padding-top: 10px; }")
+        grp_scen.setStyleSheet("QGroupBox { font-weight: bold; color: #10b981; border: 1px solid #475569; border-radius: 8px; margin-top: 6px; padding: 12px; }")
         scen_layout = QHBoxLayout(grp_scen)
 
-        btn_puff = QPushButton("💨 Имитация затяжки (Puff)")
-        btn_puff.setStyleSheet("background: #0f766e; font-weight: bold; padding: 8px;")
+        btn_puff = QPushButton("💨 Затяжка (Puff)")
+        btn_puff.setStyleSheet("background: #0f766e; color: #f8fafc; font-weight: bold; padding: 8px;")
         btn_puff.clicked.connect(self.scen_puff)
 
-        btn_chrg = QPushButton("🔌 Режим зарядки (Charging)")
-        btn_chrg.setStyleSheet("background: #b45309; font-weight: bold; padding: 8px;")
+        btn_chrg = QPushButton("🔌 Зарядка (Charging)")
+        btn_chrg.setStyleSheet("background: #b45309; color: #f8fafc; font-weight: bold; padding: 8px;")
         btn_chrg.clicked.connect(self.scen_charging)
 
         btn_all_on = QPushButton("💡 Зажечь ВСЁ (30 шт)")
-        btn_all_on.setStyleSheet("background: #4338ca; font-weight: bold; padding: 8px;")
+        btn_all_on.setStyleSheet("background: #4338ca; color: #f8fafc; font-weight: bold; padding: 8px;")
         btn_all_on.clicked.connect(self.scen_all_on)
 
         btn_all_off = QPushButton("🌑 Полностью погасить экран (0)")
-        btn_all_off.setStyleSheet("background: #334155; font-weight: bold; padding: 8px;")
+        btn_all_off.setStyleSheet("background: #334155; color: #f8fafc; font-weight: bold; padding: 8px;")
         btn_all_off.clicked.connect(self.scen_all_off)
 
         scen_layout.addWidget(btn_puff)
@@ -573,22 +584,23 @@ class DM02iController(QMainWindow):
         self.demo_counter = checked
         if checked:
             self.chk_percent_show.setChecked(True)
-            self.btn_demo_pct.setStyleSheet("background: #16a34a; font-weight: bold;")
+            self.btn_demo_pct.setStyleSheet("background: #16a34a; font-weight: bold; color: #f8fafc;")
         else:
-            self.btn_demo_pct.setStyleSheet("")
+            self.btn_demo_pct.setStyleSheet("background: #1e293b; color: #f8fafc;")
 
     def on_slider_bars_changed(self, val):
         self.liquid_bars = val
         self.lbl_bars_txt.setText(f"{val} полоски" if val > 0 else "0 (Пусто)")
         self.update_display()
 
-    def on_drop_center_toggled(self, checked):
-        self.drop_center_on = checked
-        self.update_display()
-
-    def on_drop_rim_mode_changed(self, btn_id, checked):
+    def on_drop_mode_changed(self, btn_id, checked):
         if checked:
-            self.drop_rim_mode = btn_id
+            self.drop_mode = btn_id
+            self.update_display()
+
+    def on_rim_mode_changed(self, btn_id, checked):
+        if checked:
+            self.rim_mode = btn_id
             self.update_display()
 
     def on_lightning_mode_changed(self, btn_id, checked):
@@ -603,39 +615,40 @@ class DM02iController(QMainWindow):
 
     # --- СЦЕНАРИИ ---
     def scen_puff(self):
-        """Имитация затяжки: турбо-буст + вращение капли"""
+        """Имитация затяжки: турбо-буст + вращение обводки"""
         self.chk_percent_show.setChecked(True)
-        self.bg_drop_rim.button(2).setChecked(True) # Вращение ободка
-        self.bg_boost.button(3).setChecked(True)    # Турбо раскрутка
-        self.bg_ln.button(0).setChecked(True)       # Молния выкл
-        self.slider_pct.setValue(max(0, self.percent_val - 1)) # -1% на затяжку
+        self.bg_drop.button(1).setChecked(True) # Капля горит
+        self.bg_rim.button(2).setChecked(True)  # Обводка крутится
+        self.bg_boost.button(3).setChecked(True)# Турбо раскрутка
+        self.bg_ln.button(0).setChecked(True)   # Молния выкл
+        self.slider_pct.setValue(max(0, self.percent_val - 1))
 
     def scen_charging(self):
-        """Режим зарядки: моргание молнии + заполнение батареи"""
+        """Режим зарядки: моргание молнии + горит капля"""
         self.chk_percent_show.setChecked(True)
-        self.bg_ln.button(2).setChecked(True)       # Моргание молнии
-        self.chk_drop_center.setChecked(True)       # Капля горит
-        self.bg_drop_rim.button(1).setChecked(True) # Ободок горит
-        self.bg_boost.button(0).setChecked(True)    # Буст выкл
+        self.bg_ln.button(2).setChecked(True)   # Моргание молнии
+        self.bg_drop.button(1).setChecked(True) # Капля горит
+        self.bg_rim.button(1).setChecked(True)  # Обводка горит
+        self.bg_boost.button(0).setChecked(True)# Буст выкл
         self.slider_pct.setValue(min(100, self.percent_val + 5))
 
     def scen_all_on(self):
         self.chk_percent_show.setChecked(True)
         self.slider_pct.setValue(100)
         self.slider_bars.setValue(3)
-        self.chk_drop_center.setChecked(True)
-        self.bg_drop_rim.button(1).setChecked(True)
+        self.bg_drop.button(1).setChecked(True) # Капля горит
+        self.bg_rim.button(1).setChecked(True)  # Обводка горит
         self.bg_ln.button(1).setChecked(True)
         self.bg_boost.button(1).setChecked(True)
 
     def scen_all_off(self):
-        """Полное погашение экрана: выключает проценты, жидкость, каплю, молнию и буст"""
-        self.chk_percent_show.setChecked(False) # Никаких цифр и никаких 0%
+        """Полное погашение экрана: выключает вообще всё в 0"""
+        self.chk_percent_show.setChecked(False) # Никаких цифр
         self.slider_bars.setValue(0)
-        self.chk_drop_center.setChecked(False)
-        self.bg_drop_rim.button(0).setChecked(True)
-        self.bg_ln.button(0).setChecked(True)
-        self.bg_boost.button(0).setChecked(True)
+        self.bg_drop.button(0).setChecked(True) # Капля выкл
+        self.bg_rim.button(0).setChecked(True)  # Обводка выкл
+        self.bg_ln.button(0).setChecked(True)   # Молния выкл
+        self.bg_boost.button(0).setChecked(True)# Буст выкл
 
     # --- ТАЙМЕР АНИМАЦИИ (10 FPS) ---
     def on_anim_tick(self):
@@ -646,17 +659,22 @@ class DM02iController(QMainWindow):
             nv = (self.percent_val + 1) % 101
             self.slider_pct.setValue(nv)
 
-        # Анимация вращения ободка капли
-        if self.drop_rim_mode == 2:
-            self.drop_anim_frame = (self.drop_anim_frame + 1) % 4
+        # Моргание капли
+        if self.drop_mode == 2:
+            self.drop_blink_state = (time.time() % 0.8 < 0.4)
             need_update = True
 
-        # Моргание молнии (раз в 500 мс = каждые 5 тиков)
+        # Вращение обводки капли
+        if self.rim_mode == 2:
+            self.rim_anim_frame = (self.rim_anim_frame + 1) % 4
+            need_update = True
+
+        # Моргание молнии
         if self.lightning_mode == 2:
             self.lightning_state = not self.lightning_state if (time.time() % 0.8 < 0.4) else self.lightning_state
             need_update = True
 
-        # BOOST: моргание или турбо вращение
+        # BOOST
         if self.boost_mode == 2:
             self.boost_blink_state = (time.time() % 0.6 < 0.3)
             need_update = True
@@ -671,7 +689,7 @@ class DM02iController(QMainWindow):
     def update_display(self):
         pairs = []
 
-        # 1. Цифры и Проценты (ЕСЛИ ВКЛЮЧЕНЫ)
+        # 1. Цифры и Проценты
         if self.percent_show:
             val = self.percent_val
             pairs.append(SEGS['percent'])
@@ -692,12 +710,9 @@ class DM02iController(QMainWindow):
                 d2_segs = FONT_7SEG[d2]
                 self.lbl_v_digits.setText(f"{val:02d}" if val >= 10 else f"{val}")
 
-            for s in d1_segs:
-                pairs.append(SEGS[f'd1_{s}'])
-            for s in d2_segs:
-                pairs.append(SEGS[f'd2_{s}'])
+            for s in d1_segs: pairs.append(SEGS[f'd1_{s}'])
+            for s in d2_segs: pairs.append(SEGS[f'd2_{s}'])
         else:
-            # Дисплей цифр полностью погашен
             self.lbl_v_hundred.setVisible(False)
             self.lbl_v_digits.setText("")
             self.lbl_v_percent.setVisible(False)
@@ -711,44 +726,47 @@ class DM02iController(QMainWindow):
         if self.liquid_bars >= 2: pairs.append(SEGS['bar2'])
         if self.liquid_bars >= 3: pairs.append(SEGS['bar3'])
 
-        # 3. РАЗДЕЛЬНАЯ КАПЛЯ
-        # А. Центральная капля (независимый чекбокс)
-        if self.drop_center_on:
+        # 3. КАПЛЯ 💧 (СТРОГО ОТДЕЛЬНО)
+        drop_active = False
+        if self.drop_mode == 1:
+            drop_active = True
+        elif self.drop_mode == 2:
+            drop_active = self.drop_blink_state
+
+        if drop_active:
             pairs.append(SEGS['drop_center'])
 
-        # Б. Обводка (ободок) капли (независимый радиобаттон)
+        # 4. ОБВОДКА КАПЛИ ⭕ (СТРОГО ОТДЕЛЬНО)
         rim_quads = [SEGS['drop_top'], SEGS['drop_right'], SEGS['drop_bot'], SEGS['drop_left']]
-        if self.drop_rim_mode == 1:
-            # Горит вся обводка статично (все 4 сегмента)
+        rim_active = False
+        if self.rim_mode == 1:
             pairs.extend(rim_quads)
-        elif self.drop_rim_mode == 2:
-            # Бегущий огонёк только по обводке
-            pairs.append(rim_quads[self.drop_anim_frame])
+            rim_active = True
+        elif self.rim_mode == 2:
+            pairs.append(rim_quads[self.rim_anim_frame])
+            rim_active = True
 
-        # Визуализация капли в GUI
-        if self.drop_center_on and self.drop_rim_mode == 1:
-            self.lbl_v_drop_rim.setText("💧")
-            self.lbl_v_drop_rim.setStyleSheet("font-size: 60px; color: #38bdf8;")
-            self.lbl_v_drop_info.setText("Капля + Полный ободок")
-        elif self.drop_center_on and self.drop_rim_mode == 0:
-            self.lbl_v_drop_rim.setText("•")
-            self.lbl_v_drop_rim.setStyleSheet("font-size: 60px; color: #0284c7;")
-            self.lbl_v_drop_info.setText("Только центральная капля")
-        elif not self.drop_center_on and self.drop_rim_mode == 1:
-            self.lbl_v_drop_rim.setText("◯")
-            self.lbl_v_drop_rim.setStyleSheet("font-size: 60px; color: #38bdf8;")
-            self.lbl_v_drop_info.setText("Только ободок (без центра)")
-        elif self.drop_rim_mode == 2:
-            anim_chars = ["▲", "▶", "▼", "◀"]
-            self.lbl_v_drop_rim.setText(anim_chars[self.drop_anim_frame])
-            self.lbl_v_drop_rim.setStyleSheet("font-size: 60px; color: #38bdf8;")
-            self.lbl_v_drop_info.setText(f"Вращение ободка ({'с центром' if self.drop_center_on else 'без центра'})")
+        # Визуализация в GUI
+        if drop_active and rim_active:
+            icon = "💧" if self.rim_mode == 1 else ["▲", "▶", "▼", "◀"][self.rim_anim_frame]
+            self.lbl_v_drop_graphic.setText(icon)
+            self.lbl_v_drop_graphic.setStyleSheet("font-size: 56px; color: #38bdf8;")
+            self.lbl_v_drop_info.setText("Капля + Ободок")
+        elif drop_active and not rim_active:
+            self.lbl_v_drop_graphic.setText("💧")
+            self.lbl_v_drop_graphic.setStyleSheet("font-size: 56px; color: #38bdf8;")
+            self.lbl_v_drop_info.setText("Только Капля (без обводки)")
+        elif not drop_active and rim_active:
+            icon = "◯" if self.rim_mode == 1 else ["▲", "▶", "▼", "◀"][self.rim_anim_frame]
+            self.lbl_v_drop_graphic.setText(icon)
+            self.lbl_v_drop_graphic.setStyleSheet("font-size: 56px; color: #0284c7;")
+            self.lbl_v_drop_info.setText("Только Обводка (без капли)")
         else:
-            self.lbl_v_drop_rim.setText("·")
-            self.lbl_v_drop_rim.setStyleSheet("font-size: 60px; color: #1e293b;")
-            self.lbl_v_drop_info.setText("Капля выключена")
+            self.lbl_v_drop_graphic.setText("·")
+            self.lbl_v_drop_graphic.setStyleSheet("font-size: 56px; color: #1e293b;")
+            self.lbl_v_drop_info.setText("Капля и обводка выключены")
 
-        # 4. Молния
+        # 5. Молния
         ln_active = False
         if self.lightning_mode == 1:
             ln_active = True
@@ -761,7 +779,7 @@ class DM02iController(QMainWindow):
         else:
             self.lbl_v_lightning.setStyleSheet("color: #1e293b; font-size: 20px; font-weight: bold;")
 
-        # 5. BOOST
+        # 6. BOOST
         boost_active = False
         if self.boost_mode == 1:
             pairs.extend([SEGS['boost_tl'], SEGS['boost_tr'], SEGS['boost_bl'], SEGS['boost_br']])
@@ -786,7 +804,6 @@ class DM02iController(QMainWindow):
                 border-radius: 8px; font-size: 18px; font-weight: bold; padding: 6px;
             """)
 
-        # Отправляем обновленный набор пар на микроконтроллер через SWD
         self.worker.set_pairs(pairs)
 
 def main():
